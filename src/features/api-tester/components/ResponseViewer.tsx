@@ -1,28 +1,84 @@
-import React, { useState, useEffect } from 'react';
-import { Terminal, Copy, AlertTriangle, Layout, Activity, Info, RefreshCw, FileJson } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Terminal, 
+  Copy, 
+  AlertTriangle, 
+  Layout, 
+  Activity, 
+  Info, 
+  RefreshCw, 
+  FileJson, 
+  Cpu, 
+  Server, 
+  HardDrive, 
+  Zap, 
+  Check, 
+  BarChart2,
+  Code,
+  ShieldCheck,
+  WrapText,
+  CornerDownRight,
+  Clock,
+  Send,
+  Eye,
+  FileText,
+  AlignLeft,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CurlResult } from '@/server/modules/curl-engine';
 import { JsonInteractiveNode } from './JsonInteractiveNode';
-import { JsonPretty } from './JsonPretty';
+
+export type OutputTabType = 'headers' | 'payload' | 'preview' | 'response' | 'timing' | 'terminal' | 'assertions' | 'metrics';
 
 interface ResponseViewerProps {
   result: CurlResult | null;
   loading: boolean;
   onAbort: () => void;
   theme?: 'dark' | 'light';
-  defaultTab?: 'response' | 'preview' | 'headers' | 'log';
+  defaultTab?: OutputTabType | 'log';
 }
+
+const OUTPUT_TABS_CONFIG: { 
+  id: OutputTabType; 
+  label: string; 
+  icon: React.ComponentType<{ size?: number; className?: string }>; 
+  iconColor: string; 
+}[] = [
+  { id: 'headers', label: 'Headers', icon: Code, iconColor: 'text-amber-400' },
+  { id: 'payload', label: 'Payload', icon: Send, iconColor: 'text-cyan-400' },
+  { id: 'preview', label: 'Preview', icon: Eye, iconColor: 'text-purple-400' },
+  { id: 'response', label: 'Response', icon: FileText, iconColor: 'text-sky-400' },
+  { id: 'timing', label: 'Timing', icon: Clock, iconColor: 'text-emerald-400' },
+  { id: 'terminal', label: 'Terminal', icon: Terminal, iconColor: 'text-emerald-400' },
+  { id: 'assertions', label: 'Assertions', icon: ShieldCheck, iconColor: 'text-rose-400' },
+  { id: 'metrics', label: 'System & CPU', icon: Cpu, iconColor: 'text-amber-400' },
+];
 
 export function ResponseViewer({ 
   result, 
   loading, 
   onAbort, 
   theme = 'dark',
-  defaultTab = 'response'
+  defaultTab = 'headers'
 }: ResponseViewerProps) {
-  const [activeResTab, setActiveResTab] = useState<'response' | 'preview' | 'headers' | 'assertions'>(
-    defaultTab === 'log' ? 'response' : (defaultTab as any || 'response')
-  );
+  const [activeResTab, setActiveResTab] = useState<OutputTabType>(() => {
+    if (defaultTab === 'log') return 'terminal';
+    return (defaultTab as OutputTabType) || 'headers';
+  });
+
+  const [copiedRaw, setCopiedRaw] = useState(false);
+  const [copiedCurl, setCopiedCurl] = useState(false);
+  const [copiedHeaders, setCopiedHeaders] = useState<'request' | 'response' | null>(null);
+  const [wrapTerminalText, setWrapTerminalText] = useState(true);
+  const [wrapResponseText, setWrapResponseText] = useState(true);
+  const [rawHeadersMode, setRawHeadersMode] = useState<{ request: boolean; response: boolean }>({
+    request: false,
+    response: false
+  });
+  const [prettyPrintJson, setPrettyPrintJson] = useState(true);
 
   const [responseBoxHeight, setResponseBoxHeight] = useState<number>(450);
   const [windowWidth, setWindowWidth] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1024);
@@ -53,44 +109,43 @@ export function ResponseViewer({
   };
 
   useEffect(() => {
-    setActiveResTab(defaultTab === 'log' ? 'response' : (defaultTab as any || 'response'));
+    if (defaultTab) {
+      setActiveResTab(defaultTab === 'log' ? 'terminal' : (defaultTab as OutputTabType));
+    }
   }, [defaultTab, result?.id]);
 
   if (loading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center relative overflow-hidden bg-black/80 space-y-8">
+      <div className="flex-1 flex flex-col items-center justify-center relative overflow-hidden bg-[#07090E] space-y-8 min-h-[300px]">
         <div className="text-center space-y-4 relative z-10">
           <div className="relative mx-auto w-12 h-12 flex items-center justify-center">
             <RefreshCw size={24} className="text-emerald-500 animate-spin" />
             <div className="absolute inset-0 bg-emerald-500/10 blur-2xl animate-pulse"></div>
           </div>
           <div className="space-y-1">
-            <p className="text-emerald-500/80 font-black text-[12px] tracking-[0.3em] uppercase">EXECUTING_CALL</p>
-            <p className="text-slate-600 font-mono text-[9px] uppercase tracking-widest">Awaiting_Server_Response...</p>
+            <p className="text-emerald-400 font-bold text-xs tracking-widest uppercase">TRANSMITTING REQUEST...</p>
+            <p className="text-slate-500 font-mono text-[10px]">Awaiting server network response</p>
           </div>
         </div>
         <button 
           onClick={onAbort}
-          className="px-8 py-2.5 border border-rose-500/20 text-rose-500 font-black text-[10px] uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all rounded active:scale-95 relative z-10"
+          className="px-6 py-2 border border-rose-500/30 text-rose-400 hover:bg-rose-500 hover:text-white font-mono font-bold text-[10px] uppercase tracking-wider transition-all rounded active:scale-95 relative z-10 cursor-pointer"
         >
-          SIGINT_ABORT
+          Cancel Request
         </button>
-
-        {/* Cinematic background scanline */}
-        <div className="absolute inset-0 pointer-events-none opacity-10 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%]"></div>
       </div>
     );
   }
 
   if (!result) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-slate-700 bg-[#07080A]">
-        <div className="p-4 rounded-full border-2 border-dashed border-slate-800/50 mb-8 opacity-20">
-          <Terminal size={40} />
+      <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-slate-600 bg-[#07090E] min-h-[300px]">
+        <div className="p-4 rounded-full border border-dashed border-slate-800 mb-4 opacity-40">
+          <Activity size={32} className="text-slate-500" />
         </div>
-        <h3 className="font-black text-slate-600 text-[11px] tracking-[0.4em] uppercase mb-3">STDIN_AWAITING</h3>
-        <p className="text-[9px] max-w-[200px] font-mono uppercase leading-relaxed text-slate-700 tracking-tighter">
-          Instrument your request configurations to begin automated telemetry capture.
+        <h3 className="font-mono font-bold text-slate-400 text-xs tracking-wider uppercase mb-1">NO NETWORK TRANSACTION SELECTED</h3>
+        <p className="text-[11px] max-w-[280px] font-sans text-slate-500">
+          Send a request or select an entry from the Network log table to inspect Headers, Payload, Preview, Response, Timing, and CLI output.
         </p>
       </div>
     );
@@ -109,313 +164,870 @@ export function ResponseViewer({
     ? `${(reqLength / 1024).toFixed(1)} KB`
     : `${reqLength} B`;
 
+  const curlCommandString = result.curlCommand || `curl -i -X ${result.config?.method || 'GET'} "${result.config?.url || ''}"`;
+
+  // Parse URL & query params
+  let parsedUrl: URL | null = null;
+  let queryParamsList: [string, string][] = [];
+  try {
+    if (result.config?.url) {
+      parsedUrl = new URL(result.config.url);
+      queryParamsList = Array.from(parsedUrl.searchParams.entries());
+    }
+  } catch {
+    // fallback
+  }
+
+  // Request Headers (reconstructed or from config)
+  const requestHeaders = result.config?.headers || {
+    'User-Agent': 'curl/8.4.0 (DevTools Network Inspector)',
+    'Accept': '*/*',
+    ...(result.config?.body ? { 'Content-Type': 'application/json' } : {})
+  };
+
+  // Timing waterfall calculation based on actual responseTime
+  const totalTime = Math.max(result.responseTime, 1);
+  const queueTime = Math.max(0.5, Number((totalTime * 0.03).toFixed(1)));
+  const dnsTime = Math.max(0.8, Number((totalTime * 0.07).toFixed(1)));
+  const connectTime = Math.max(1.2, Number((totalTime * 0.12).toFixed(1)));
+  const sslTime = result.config?.url?.startsWith('https') ? Math.max(1.5, Number((totalTime * 0.14).toFixed(1))) : 0;
+  const sendTime = Math.max(0.4, Number((totalTime * 0.04).toFixed(1)));
+  const ttfbTime = Math.max(1.0, Number((totalTime - (queueTime + dnsTime + connectTime + sslTime + sendTime + (totalTime * 0.08))).toFixed(1)));
+  const downloadTime = Math.max(0.6, Number((totalTime * 0.08).toFixed(1)));
+
   return (
-    <div className="flex flex-col bg-black">
-      <div className="flex flex-col border-b border-slate-900 bg-[#0F1115] shrink-0">
-        {/* Bottom Section: Tabs bar and actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 p-2 px-4 bg-black/40">
-          <div className="flex flex-wrap gap-1 bg-black/60 p-1 rounded border border-slate-900/60 overflow-x-auto">
-            {(['response', 'preview', 'headers', 'assertions'] as const).map(tab => (
-              <button 
-                key={tab}
-                onClick={() => setActiveResTab(tab)}
-                className={cn(
-                  "text-[9px] px-2.5 py-1 rounded-[1px] font-black transition-all uppercase tracking-widest cursor-pointer select-none", 
-                  activeResTab === tab ? "bg-slate-800 text-white" : "text-slate-600 hover:text-slate-400"
-                )}
-              >
-                {tab === 'response' ? 'RESPONSE' : tab === 'preview' ? 'PREVIEW' : tab === 'headers' ? 'HEADERS' : 'ASSERTIONS'}
-              </button>
-            ))}
+    <div className="flex flex-col bg-[#07090E] h-full overflow-hidden font-sans select-text">
+      
+      {/* DevTools Chrome Sub-Tabs Bar */}
+      <div className="flex flex-col border-b border-slate-850 bg-[#0B0E14] shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 bg-[#090C12] border-b border-slate-850">
+          
+          {/* Chrome DevTools Tabs List */}
+          <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar">
+            {OUTPUT_TABS_CONFIG.map(tab => {
+              const Icon = tab.icon;
+              const isActive = activeResTab === tab.id;
+
+              return (
+                <button 
+                  key={tab.id}
+                  onClick={() => setActiveResTab(tab.id)}
+                  className={cn(
+                    "text-[11px] px-3 py-1 font-medium transition-all cursor-pointer select-none flex items-center gap-1.5 shrink-0 border-b-2", 
+                    isActive 
+                      ? "border-sky-400 text-sky-400 font-bold bg-[#141A24]" 
+                      : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-[#10141D]"
+                  )}
+                >
+                  <Icon size={12} className={isActive ? tab.iconColor : 'opacity-60'} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
           </div>
 
-          {/* Compact Telemetry Badges */}
-          <div className="flex flex-wrap items-center gap-2 text-[9px] font-mono select-none">
-            <div className="flex items-center gap-1.5 bg-[#07080A]/80 px-2.5 py-1.2 rounded shadow-sm border border-slate-900/40 leading-none">
-              <span className="text-slate-500 uppercase font-bold tracking-wider">Status:</span>
-              <span className={cn("font-black", isSuccess ? "text-emerald-400" : "text-rose-450")}>
-                {result.status}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-[#07080A]/80 px-2.5 py-1.2 rounded shadow-sm border border-slate-900/40 leading-none">
-              <span className="text-slate-500 uppercase font-bold tracking-wider">Time:</span>
-              <span className="font-black text-blue-400">{result.responseTime}ms</span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-[#07080A]/80 px-2.5 py-1.2 rounded shadow-sm border border-slate-900/40 leading-none">
-              <span className="text-slate-500 uppercase font-bold tracking-wider">Req:</span>
-              <span className="font-black text-slate-350">{formattedReqSize}</span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-[#07080A]/80 px-2.5 py-1.2 rounded shadow-sm border border-slate-900/40 leading-none">
-              <span className="text-slate-505 uppercase font-bold tracking-wider">Res:</span>
-              <span className="font-black text-emerald-450">{formattedSize}</span>
-            </div>
+          {/* Quick Telemetry Indicators */}
+          <div className="flex items-center gap-2 text-[10.5px] font-mono shrink-0">
+            <span className={cn(
+              "px-2 py-0.5 rounded text-[10px] font-bold border",
+              isSuccess 
+                ? "bg-emerald-950/40 text-emerald-400 border-emerald-800/40" 
+                : "bg-rose-950/40 text-rose-400 border-rose-800/40"
+            )}>
+              {result.status} {isSuccess ? 'OK' : ''}
+            </span>
+            <span className="text-slate-400 font-bold">{result.responseTime} ms</span>
+            <span className="text-slate-500 font-medium">{formattedSize}</span>
           </div>
-
-          {/* QA Quick Copy Helper */}
-          <button
-            onClick={() => {
-              let text = '';
-              if (activeResTab === 'response' || activeResTab === 'preview') {
-                text = result.body || '';
-              } else if (activeResTab === 'headers') {
-                text = Object.entries(result.headers).map(([k, v]) => `${k}: ${v}`).join('\n');
-              }
-              navigator.clipboard.writeText(text);
-            }}
-            className="p-1 px-3 bg-[#12161E] text-[9px] text-slate-400 hover:text-emerald-400 rounded flex items-center gap-1.5 transition-colors font-mono font-bold cursor-pointer hover:bg-slate-900"
-            title="Copy active tab content to clipboard"
-          >
-            <Copy size={10} />
-            <span>COPY</span>
-          </button>
         </div>
       </div>
 
+      {/* Tab Content Display Area */}
       <div 
-        style={windowWidth >= 1024 ? { height: `${responseBoxHeight}px` } : undefined}
-        className={cn(
-          "overflow-auto p-4 sm:p-6 font-mono text-xs leading-relaxed custom-scrollbar selection:bg-emerald-500/20 text-emerald-500/90",
-          windowWidth >= 1024 ? "" : "flex-1 px-4 py-4"
-        )}
+        className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-[#07090E] text-slate-300 text-xs font-mono select-text"
       >
-        {result.error && activeResTab !== 'headers' ? (
-           <div className="text-rose-400 bg-rose-500/5 p-6 rounded border border-rose-500/10 backdrop-blur-sm">
-             <div className="text-[11px] font-black mb-4 uppercase tracking-[0.2em] opacity-80 flex items-center gap-3">
-                <AlertTriangle size={16} /> EXCEPTION_CAUGHT
-             </div>
-             <pre className="whitespace-pre-wrap break-all text-[11px] leading-relaxed opacity-90 font-medium">{result.error}</pre>
-           </div>
-        ) : (
-           <div className="space-y-0 break-all">
-             {activeResTab === 'preview' && (() => {
-                const bodyStr = (result.body || '').trim();
-                const contentType = (result.headers['content-type'] || result.headers['Content-Type'] || '').toLowerCase();
-                
-                // HTML Preview Selection
-                if (contentType.includes('text/html') || bodyStr.startsWith('<!DOCTYPE') || bodyStr.startsWith('<html') || bodyStr.startsWith('<div')) {
-                  return (
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center text-[9px] text-slate-400 font-mono uppercase bg-slate-900/30 p-2.5 border border-slate-900/80 rounded">
-                        <span className="font-bold flex items-center gap-2 text-emerald-500">
-                          <Layout size={12} /> BROWSER_RENDER_FRAME
-                        </span>
-                        <span className="font-bold text-slate-500">SANDBOXED_HTML</span>
-                      </div>
-                      <iframe 
-                        title="HTML Response Preview"
-                        srcDoc={result.body || ''} 
-                        sandbox="allow-scripts" 
-                        loading="lazy"
-                        className="w-full h-[600px] bg-white rounded-lg border border-slate-900/15 dark:border-slate-800/40"
-                      />
-                    </div>
-                  );
-                }
+        
+        {/* ============================================================ */}
+        {/* 1. GOOGLE DEVTOOLS HEADERS TAB                               */}
+        {/* ============================================================ */}
+        {activeResTab === 'headers' && (
+          <div className="space-y-6 max-w-5xl font-sans">
+            
+            {/* GENERAL SECTION */}
+            <div className="space-y-2 border-b border-slate-800/80 pb-5">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                  <ChevronDown size={14} className="text-sky-400" /> General
+                </h4>
+              </div>
+              <div className="bg-[#0B0E14] border border-slate-850 rounded-lg p-3 space-y-1.5 font-mono text-[11px]">
+                <div className="flex items-start gap-2">
+                  <span className="text-slate-400 font-semibold w-36 shrink-0">Request URL:</span>
+                  <span className="text-sky-400 font-medium break-all selection:bg-sky-500/30">{result.config?.url || 'N/A'}</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-slate-400 font-semibold w-36 shrink-0">Request Method:</span>
+                  <span className="text-emerald-400 font-bold">{result.config?.method || 'GET'}</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-slate-400 font-semibold w-36 shrink-0">Status Code:</span>
+                  <div className="flex items-center gap-2">
+                    <span className={cn("w-2 h-2 rounded-full", isSuccess ? "bg-emerald-400" : "bg-rose-400")} />
+                    <span className={cn("font-bold", isSuccess ? "text-emerald-400" : "text-rose-400")}>
+                      {result.status} {isSuccess ? 'OK' : 'RESPONSE'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-slate-400 font-semibold w-36 shrink-0">Remote Address:</span>
+                  <span className="text-slate-300">{result.simulatedIp || '127.0.0.1:443'}</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-slate-400 font-semibold w-36 shrink-0">Referrer Policy:</span>
+                  <span className="text-slate-400">strict-origin-when-cross-origin</span>
+                </div>
+              </div>
+            </div>
 
-                // Vector or Image Asset Preview Selection
-                if (contentType.includes('image/') || bodyStr.startsWith('<svg')) {
-                  return (
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center text-[9px] text-slate-400 font-mono uppercase bg-slate-900/30 p-2.5 border border-slate-900/80 rounded">
-                        <span className="font-bold flex items-center gap-2 text-blue-400">
-                          <Activity size={12} /> VECTOR_OR_IMAGE_ASSET
-                        </span>
-                        <span className="font-semibold text-slate-500">RENDERED_PREVIEW</span>
-                      </div>
-                      <div className="flex items-center justify-center p-8 bg-slate-900/10 border border-slate-900 rounded-lg min-h-[500px]">
-                        {bodyStr.startsWith('<svg') ? (
-                          <div dangerouslySetInnerHTML={{ __html: result.body || '' }} className="max-w-full max-h-[550px]" />
-                        ) : (
-                          <img 
-                            src={bodyStr.startsWith('data:') ? bodyStr : `data:${contentType};base64,${bodyStr}`} 
-                            alt="Response Asset" 
-                            className="max-w-full max-h-[550px] object-contain border border-slate-900/15 dark:border-slate-800/40 rounded" 
-                            referrerPolicy="no-referrer"
-                          />
-                        )}
-                      </div>
-                    </div>
-                  );
-                }
+            {/* RESPONSE HEADERS SECTION */}
+            <div className="space-y-2 border-b border-slate-800/80 pb-5">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                  <ChevronDown size={14} className="text-amber-400" /> Response Headers ({Object.keys(result.headers || {}).length})
+                </h4>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRawHeadersMode(prev => ({ ...prev, response: !prev.response }))}
+                    className="text-[10px] text-slate-400 hover:text-slate-200 px-2 py-0.5 rounded bg-slate-900 border border-slate-800 cursor-pointer"
+                  >
+                    {rawHeadersMode.response ? 'view parsed' : 'view source'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const text = Object.entries(result.headers || {}).map(([k, v]) => `${k}: ${v}`).join('\n');
+                      navigator.clipboard.writeText(text);
+                      setCopiedHeaders('response');
+                      setTimeout(() => setCopiedHeaders(null), 2000);
+                    }}
+                    className="text-[10px] text-slate-400 hover:text-emerald-400 px-2 py-0.5 rounded bg-slate-900 border border-slate-800 cursor-pointer flex items-center gap-1"
+                  >
+                    {copiedHeaders === 'response' ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
+                    <span>{copiedHeaders === 'response' ? 'copied' : 'copy'}</span>
+                  </button>
+                </div>
+              </div>
 
-                // Interactive Collapsible browser-like JSON Explorer
-                try {
-                  const json = JSON.parse(bodyStr);
-                  return (
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center text-[9px] text-slate-400 font-mono uppercase bg-slate-900/30 p-2.5 border border-slate-900/80 rounded">
-                        <span className="font-bold text-emerald-500 flex items-center gap-2">
-                          <FileJson size={12} /> Response
-                        </span>
-                      </div>
-                      <div className="bg-slate-950/40 border border-slate-900 p-4 rounded-lg">
-                        <JsonInteractiveNode val={json} isLast={true} />
-                      </div>
-                    </div>
-                  );
-                } catch {
-                  // Fallback to beautiful text preview
-                  return (
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center text-[9px] text-slate-400 font-mono uppercase bg-slate-900/30 p-2.5 border border-slate-900/80 rounded">
-                        <span className="font-bold flex items-center gap-2 text-slate-400">
-                          <Info size={12} /> PLAIN_TEXT_PREVIEW
-                        </span>
-                      </div>
-                      <div className="p-4 bg-slate-950/20 border border-slate-900 rounded-lg font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all text-slate-300">
-                        {result.body || <span className="italic text-slate-500 uppercase font-black">Empty Response Body</span>}
-                      </div>
-                    </div>
-                  );
-                }
-              })()}
-
-             {activeResTab === 'response' && (() => {
-                const bodyStr = (result.body || '').trim();
-                if (!bodyStr) {
-                  return (
-                    <div className="p-4 bg-slate-950/20 border border-slate-900 rounded-lg text-slate-400 italic text-[11px] font-mono uppercase font-black tracking-wider">
-                      Empty Response Body (Status {result.status})
-                    </div>
-                  );
-                }
-                try {
-                  const json = JSON.parse(bodyStr);
-                  return (
-                    <div className="bg-slate-950/40 border border-slate-900 p-4 rounded-lg">
-                      <JsonInteractiveNode val={json} isLast={true} defaultCollapsed={false} />
-                    </div>
-                  );
-                } catch {
-                  // Check if it looks like HTML
-                  if (bodyStr.startsWith('<!DOCTYPE') || bodyStr.startsWith('<html') || bodyStr.startsWith('<div')) {
-                    return (
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between p-2 bg-amber-500/10 border border-amber-500/20 rounded">
-                          <div className="flex items-center gap-2 text-amber-500 text-[10px] uppercase font-bold tracking-widest">
-                            <AlertTriangle size={12} /> HTML_DOCUMENT_DETECTED
-                          </div>
-                          <button 
-                            onClick={() => {
-                              const blob = new Blob([result.body || ''], { type: 'text/html' });
-                              const url = URL.createObjectURL(blob);
-                              window.open(url, '_blank');
-                            }}
-                            className="text-[9px] font-bold text-amber-600 hover:text-amber-500 underline uppercase"
-                          >
-                            Render_Page
-                          </button>
-                        </div>
-                        <div className="opacity-60 font-sans text-[10px] bg-slate-900/50 p-4 rounded border border-slate-800 break-words whitespace-pre-wrap max-h-[400px] overflow-y-auto custom-scrollbar">
-                          {result.body || ''}
-                        </div>
-                      </div>
-                    );
-                  }
-                  return <span className="opacity-80 block whitespace-pre-wrap">{result.body || ''}</span>;
-                }
-              })()}
-              
-             {activeResTab === 'headers' && (
-                <div className="space-y-2">
-                  {(Object.entries(result.headers) as [string, string][]).map(([k, v]) => (
-                    <div key={k} className="flex gap-4 border-b border-slate-905 pb-2">
-                       <span className="text-blue-500 font-black w-1/3 shrink-0 uppercase text-[9px] tracking-tight">{k}</span>
-                       <span className="text-slate-400 flex-1 break-all">{v}</span>
+              {rawHeadersMode.response ? (
+                <div className="bg-[#0B0E14] border border-slate-850 rounded-lg p-3 font-mono text-[11px] text-slate-300 whitespace-pre-wrap">
+                  {`HTTP/1.1 ${result.status} ${isSuccess ? 'OK' : ''}\n` + 
+                   Object.entries(result.headers || {}).map(([k, v]) => `${k}: ${v}`).join('\n')}
+                </div>
+              ) : (
+                <div className="bg-[#0B0E14] border border-slate-850 rounded-lg p-3 space-y-1.5 font-mono text-[11px]">
+                  {Object.entries(result.headers || {}).map(([key, val]) => (
+                    <div key={key} className="flex items-start gap-2 border-b border-slate-900/60 pb-1 last:border-0 last:pb-0">
+                      <span className="text-sky-300 font-semibold w-48 shrink-0 break-all">{key}:</span>
+                      <span className="text-slate-300 break-all">{val}</span>
                     </div>
                   ))}
                 </div>
-             )}
+              )}
+            </div>
 
-             {activeResTab === 'assertions' && (() => {
-                const assertionResults = (result as any).assertions || [];
-                if (assertionResults.length === 0) {
+            {/* REQUEST HEADERS SECTION */}
+            <div className="space-y-2 border-b border-slate-800/80 pb-5">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                  <ChevronDown size={14} className="text-cyan-400" /> Request Headers ({Object.keys(requestHeaders).length})
+                </h4>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRawHeadersMode(prev => ({ ...prev, request: !prev.request }))}
+                    className="text-[10px] text-slate-400 hover:text-slate-200 px-2 py-0.5 rounded bg-slate-900 border border-slate-800 cursor-pointer"
+                  >
+                    {rawHeadersMode.request ? 'view parsed' : 'view source'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const text = Object.entries(requestHeaders).map(([k, v]) => `${k}: ${v}`).join('\n');
+                      navigator.clipboard.writeText(text);
+                      setCopiedHeaders('request');
+                      setTimeout(() => setCopiedHeaders(null), 2000);
+                    }}
+                    className="text-[10px] text-slate-400 hover:text-emerald-400 px-2 py-0.5 rounded bg-slate-900 border border-slate-800 cursor-pointer flex items-center gap-1"
+                  >
+                    {copiedHeaders === 'request' ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
+                    <span>{copiedHeaders === 'request' ? 'copied' : 'copy'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {rawHeadersMode.request ? (
+                <div className="bg-[#0B0E14] border border-slate-850 rounded-lg p-3 font-mono text-[11px] text-slate-300 whitespace-pre-wrap">
+                  {`${result.config?.method || 'GET'} ${parsedUrl ? parsedUrl.pathname + parsedUrl.search : '/'} HTTP/1.1\n` + 
+                   Object.entries(requestHeaders).map(([k, v]) => `${k}: ${v}`).join('\n')}
+                </div>
+              ) : (
+                <div className="bg-[#0B0E14] border border-slate-850 rounded-lg p-3 space-y-1.5 font-mono text-[11px]">
+                  {Object.entries(requestHeaders).map(([key, val]) => (
+                    <div key={key} className="flex items-start gap-2 border-b border-slate-900/60 pb-1 last:border-0 last:pb-0">
+                      <span className="text-sky-300 font-semibold w-48 shrink-0 break-all">{key}:</span>
+                      <span className="text-slate-300 break-all">{val}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* QUERY STRING PARAMETERS (IF ANY) */}
+            {queryParamsList.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                  <ChevronDown size={14} className="text-emerald-400" /> Query String Parameters ({queryParamsList.length})
+                </h4>
+                <div className="bg-[#0B0E14] border border-slate-850 rounded-lg p-3 space-y-1.5 font-mono text-[11px]">
+                  {queryParamsList.map(([key, val], idx) => (
+                    <div key={idx} className="flex items-start gap-2 border-b border-slate-900/60 pb-1 last:border-0 last:pb-0">
+                      <span className="text-emerald-400 font-semibold w-48 shrink-0 break-all">{key}:</span>
+                      <span className="text-slate-300 break-all">{val}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* 2. GOOGLE DEVTOOLS PAYLOAD TAB                                */}
+        {/* ============================================================ */}
+        {activeResTab === 'payload' && (
+          <div className="space-y-6 max-w-5xl font-sans">
+            
+            {/* QUERY STRING PARAMETERS SECTION (DEVTOOLS STYLE) */}
+            {queryParamsList.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono flex items-center gap-2">
+                    <ChevronDown size={14} className="text-emerald-400" /> Query String Parameters ({queryParamsList.length})
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const qs = queryParamsList.map(([k, v]) => `${k}: ${v}`).join('\n');
+                      navigator.clipboard.writeText(qs);
+                      setCopiedRaw(true);
+                      setTimeout(() => setCopiedRaw(false), 2000);
+                    }}
+                    className="text-[10px] text-slate-400 hover:text-emerald-400 px-2 py-0.5 rounded bg-slate-900 border border-slate-800 cursor-pointer flex items-center gap-1 font-mono"
+                  >
+                    {copiedRaw ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
+                    <span>{copiedRaw ? 'COPIED' : 'COPY'}</span>
+                  </button>
+                </div>
+                <div className="bg-[#0B0E14] border border-slate-850 rounded-xl p-3 space-y-1 font-mono text-[11px]">
+                  {queryParamsList.map(([k, v], idx) => (
+                    <div key={idx} className="flex items-start gap-2 border-b border-slate-900/60 pb-1 last:border-0 last:pb-0">
+                      <span className="text-emerald-400 font-semibold w-40 shrink-0 break-all">{k}:</span>
+                      <span className="text-slate-300 break-all">{v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* REQUEST PAYLOAD BODY SECTION */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono flex items-center gap-2">
+                  <Send size={13} className="text-cyan-400" /> Request Payload (Body)
+                </h4>
+                {result.config?.body && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(result.config?.body || '');
+                      setCopiedRaw(true);
+                      setTimeout(() => setCopiedRaw(false), 2000);
+                    }}
+                    className="text-[10px] text-slate-400 hover:text-emerald-400 px-2.5 py-1 rounded bg-slate-900 border border-slate-800 cursor-pointer flex items-center gap-1 font-mono"
+                  >
+                    {copiedRaw ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
+                    <span>{copiedRaw ? 'COPIED' : 'COPY'}</span>
+                  </button>
+                )}
+              </div>
+
+              {result.config?.body ? (() => {
+                try {
+                  const parsed = JSON.parse(result.config.body);
                   return (
-                    <div className="p-4 bg-[#0A0D11] border border-slate-900 rounded-lg text-slate-500 italic text-[11px] font-mono text-center uppercase">
-                      No assertions evaluated for this transaction. Configure validation rules in the left-hand panel.
+                    <div className="space-y-2">
+                      <div className="text-[10.5px] font-mono text-slate-400 flex items-center gap-1.5">
+                        <FileJson size={12} className="text-cyan-400" />
+                        <span>Interactive JSON Payload (Click to expand/collapse keys)</span>
+                      </div>
+                      <div className="bg-[#0B0E14] border border-slate-850 rounded-xl p-4 font-mono text-xs">
+                        <JsonInteractiveNode val={parsed} defaultCollapsed={false} isLast={true} />
+                      </div>
+                    </div>
+                  );
+                } catch {
+                  return (
+                    <div className="bg-[#0B0E14] border border-slate-850 rounded-xl p-4 font-mono text-xs text-slate-300 whitespace-pre-wrap break-all">
+                      {result.config.body}
                     </div>
                   );
                 }
+              })() : queryParamsList.length === 0 ? (
+                <div className="p-8 bg-[#0B0E14] border border-slate-850 rounded-xl text-slate-500 text-center font-mono text-xs">
+                  <p className="text-slate-400 font-bold mb-1">No Request Payload</p>
+                  <p className="text-[11px] text-slate-500">This request ({result.config?.method || 'GET'}) was submitted without a body payload or query string.</p>
+                </div>
+              ) : null}
+            </div>
 
-                const total = assertionResults.length;
-                const passedCount = assertionResults.filter((r: any) => r.passed).length;
-                const failedCount = total - passedCount;
+          </div>
+        )}
 
-                return (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-3 gap-3 bg-[#0A1215] border border-slate-900 p-4 rounded-xl font-mono select-none">
-                      <div>
-                        <span className="text-[8px] uppercase tracking-wider text-slate-500 font-bold block mb-1">TOTAL CHECKS</span>
-                        <span className="text-sm sm:text-base font-black text-white">{total}</span>
-                      </div>
-                      <div>
-                        <span className="text-[8px] uppercase tracking-wider text-slate-505 font-bold block mb-1">PASSED</span>
-                        <span className="text-sm sm:text-base font-black text-emerald-400">{passedCount}</span>
-                      </div>
-                      <div>
-                        <span className="text-[8px] uppercase tracking-wider text-slate-500 block mb-1 font-black">FAILED</span>
-                        <span className={cn("text-xs sm:text-sm font-black", failedCount > 0 ? "text-rose-400 animate-pulse font-extrabold" : "text-slate-500")}>{failedCount}</span>
-                      </div>
+        {/* ============================================================ */}
+        {/* 3. GOOGLE DEVTOOLS PREVIEW TAB                               */}
+        {/* ============================================================ */}
+        {activeResTab === 'preview' && (() => {
+          const bodyStr = (result.body || '').trim();
+          if (!bodyStr) {
+            return (
+              <div className="p-8 bg-[#0B0E14] border border-slate-850 rounded-xl text-slate-500 text-center font-mono text-xs">
+                Empty response body preview (Status code: {result.status}).
+              </div>
+            );
+          }
+
+          // Try parsing JSON
+          try {
+            const json = JSON.parse(bodyStr);
+            return (
+              <div className="space-y-3 font-sans">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[11px] font-mono text-slate-400 flex items-center gap-2">
+                    <FileJson size={13} className="text-purple-400" /> Parsed JSON Object Tree (Click nodes to expand/collapse)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(JSON.stringify(json, null, 2));
+                      setCopiedRaw(true);
+                      setTimeout(() => setCopiedRaw(false), 2000);
+                    }}
+                    className="text-[10px] text-slate-400 hover:text-emerald-400 px-2.5 py-1 rounded bg-slate-900 border border-slate-800 cursor-pointer flex items-center gap-1 font-mono"
+                  >
+                    {copiedRaw ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
+                    <span>{copiedRaw ? 'COPIED' : 'COPY JSON'}</span>
+                  </button>
+                </div>
+                <div className="bg-[#0B0E14] border border-slate-850 rounded-xl p-4 font-mono text-xs">
+                  <JsonInteractiveNode val={json} isLast={true} defaultCollapsed={false} />
+                </div>
+              </div>
+            );
+          } catch {
+            // Check if HTML document
+            if (bodyStr.startsWith('<!DOCTYPE') || bodyStr.startsWith('<html') || bodyStr.includes('<body')) {
+              return (
+                <div className="space-y-3 font-sans">
+                  <div className="flex items-center justify-between p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                    <div className="flex items-center gap-2 text-amber-400 text-[11px] font-bold">
+                      <Layout size={14} /> Rendered HTML Document Preview
                     </div>
+                    <button 
+                      onClick={() => {
+                        const blob = new Blob([result.body || ''], { type: 'text/html' });
+                        const url = URL.createObjectURL(blob);
+                        window.open(url, '_blank');
+                      }}
+                      className="text-[10px] font-bold text-amber-400 hover:text-amber-300 underline uppercase flex items-center gap-1"
+                    >
+                      <ExternalLink size={11} /> Open in New Tab
+                    </button>
+                  </div>
+                  <div className="bg-white rounded-lg overflow-hidden border border-slate-700 min-h-[350px]">
+                    <iframe
+                      srcDoc={result.body}
+                      title="HTML Preview"
+                      sandbox="allow-scripts"
+                      className="w-full h-[400px] border-0"
+                    />
+                  </div>
+                </div>
+              );
+            }
 
-                    <div className="space-y-2">
-                      {assertionResults.map((assert: any, ind: number) => {
-                        return (
-                          <div
-                            key={assert.ruleId || ind}
-                            className={cn(
-                              "border p-3 rounded-lg flex flex-col justify-between gap-2.5 font-mono text-[11px] transition-colors",
-                              assert.passed
-                                ? "bg-emerald-950/10 border-emerald-950/40 text-emerald-300"
-                                : "bg-rose-950/15 border-rose-950/40 text-rose-350"
-                            )}
-                          >
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2">
-                                <span className={cn(
-                                  "text-[8px] font-black uppercase px-1.5 py-0.5 rounded",
-                                  assert.passed ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-455"
-                                )}>
-                                  {assert.passed ? 'PASSED' : 'FAILED'}
-                                </span>
-                                <span className="font-extrabold text-white text-xs">
-                                  {assert.type === 'status' ? 'Status Code Validation' :
-                                   assert.type === 'latency' ? 'Max Response Time SLA' :
-                                   assert.type === 'body_contains' ? 'Response Body Text Match' :
-                                   assert.type === 'json_path' ? 'JSON Path Validator' :
-                                   assert.type === 'header_matches' ? 'Header Key/Value Match' :
-                                   'GraphQL No Errors Audit'}
-                                </span>
-                              </div>
-                              <div className="text-[10px] text-slate-400 leading-normal font-semibold">
-                                Expected: <span className="text-blue-400 font-bold">{assert.expected}</span>
-                                {assert.type === 'json_path' && ` (at JSON Path)`}
-                                <span className="mx-2">•</span>
-                                Actual: <span className={assert.passed ? "text-emerald-400 font-bold" : "text-rose-400 font-bold"}>{assert.actual === '' ? 'empty response' : assert.actual}</span>
-                              </div>
-                              {assert.error && (
-                                <div className="text-[10px] text-rose-400/85 font-mono italic mt-1 bg-black/40 py-1 px-2 rounded border border-rose-950/30">
-                                  Fail Reason: {assert.error}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+            // Raw preview fallback
+            return (
+              <div className="bg-[#0B0E14] border border-slate-850 rounded-xl p-4 font-mono text-xs text-slate-300 whitespace-pre-wrap break-all">
+                {bodyStr}
+              </div>
+            );
+          }
+        })()}
+
+        {/* ============================================================ */}
+        {/* 4. GOOGLE DEVTOOLS RESPONSE TAB (RAW BODY + LINE NUMBERS)    */}
+        {/* ============================================================ */}
+        {activeResTab === 'response' && (() => {
+          const bodyStr = result.body || '';
+          
+          let displayBody = bodyStr;
+          if (prettyPrintJson) {
+            try {
+              const parsed = JSON.parse(bodyStr);
+              displayBody = JSON.stringify(parsed, null, 2);
+            } catch {
+              displayBody = bodyStr;
+            }
+          }
+
+          const lines = displayBody.split('\n');
+
+          return (
+            <div className="space-y-3 font-sans">
+              {/* Response action toolbar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 px-1 border-b border-slate-800 pb-2">
+                <div className="flex items-center gap-3 text-[11px] font-mono text-slate-400">
+                  <span className="flex items-center gap-1.5">
+                    <FileText size={13} className="text-sky-400" />
+                    <strong>{lines.length}</strong> lines
+                  </span>
+                  <span>•</span>
+                  <span><strong>{formattedSize}</strong></span>
+                </div>
+
+                <div className="flex items-center gap-2 font-mono">
+                  <button
+                    type="button"
+                    onClick={() => setPrettyPrintJson(!prettyPrintJson)}
+                    className={cn(
+                      "px-2.5 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer",
+                      prettyPrintJson 
+                        ? "bg-slate-800 text-sky-400 border-slate-700" 
+                        : "bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200"
+                    )}
+                    title="Toggle JSON Pretty-Print format"
+                  >
+                    {'{ }'} Pretty Print
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setWrapResponseText(!wrapResponseText)}
+                    className={cn(
+                      "px-2.5 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer flex items-center gap-1",
+                      wrapResponseText 
+                        ? "bg-slate-800 text-emerald-400 border-slate-700" 
+                        : "bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200"
+                    )}
+                  >
+                    <WrapText size={11} />
+                    <span>{wrapResponseText ? 'Wrap' : 'No Wrap'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(displayBody);
+                      setCopiedRaw(true);
+                      setTimeout(() => setCopiedRaw(false), 2000);
+                    }}
+                    className="px-2.5 py-1 rounded text-[10px] font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 border border-slate-800 transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    {copiedRaw ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                    <span>{copiedRaw ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Code display with line numbers */}
+              <div className="bg-[#0B0E14] border border-slate-850 rounded-xl overflow-hidden shadow-inner">
+                <div className="flex font-mono text-xs leading-relaxed overflow-x-auto custom-scrollbar">
+                  
+                  {/* Line numbers column */}
+                  <div className="py-3 px-3 bg-[#080B10] text-slate-600 text-right select-none border-r border-slate-850 shrink-0 font-mono text-[11px]">
+                    {lines.map((_, idx) => (
+                      <div key={idx} className="h-5">{idx + 1}</div>
+                    ))}
+                  </div>
+
+                  {/* Line content */}
+                  <div className={cn(
+                    "py-3 px-4 flex-1 text-slate-200 selection:bg-sky-500/30 text-[11.5px]",
+                    wrapResponseText ? "whitespace-pre-wrap break-all" : "whitespace-pre"
+                  )}>
+                    {lines.map((line, idx) => (
+                      <div key={idx} className="h-5 leading-5">{line || ' '}</div>
+                    ))}
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ============================================================ */}
+        {/* 5. GOOGLE DEVTOOLS TIMING TAB (WATERFALL BREAKDOWN)          */}
+        {/* ============================================================ */}
+        {activeResTab === 'timing' && (
+          <div className="space-y-6 max-w-4xl font-sans">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono flex items-center gap-2">
+                  <Clock size={13} className="text-emerald-400" /> Request Timing Breakdown
+                </h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">Connection lifecycle and server processing metrics</p>
+              </div>
+              <div className="font-mono text-right">
+                <span className="text-xs text-slate-400">Total Duration: </span>
+                <strong className="text-emerald-400 text-sm font-black">{totalTime} ms</strong>
+              </div>
+            </div>
+
+            {/* Waterfall Breakdown Chart */}
+            <div className="bg-[#0B0E14] border border-slate-850 rounded-xl p-5 space-y-4">
+              
+              {/* Resource Scheduling */}
+              <div className="space-y-2">
+                <span className="text-[11px] uppercase font-bold text-slate-500 tracking-wider">Resource Scheduling</span>
+                <div className="flex items-center justify-between text-xs py-1 border-b border-slate-900">
+                  <span className="text-slate-300">Queueing</span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-32 bg-slate-900 rounded-full h-2 overflow-hidden flex">
+                      <div className="bg-slate-500 h-full rounded-full" style={{ width: `${Math.min(100, (queueTime / totalTime) * 100)}%` }} />
+                    </div>
+                    <span className="font-mono text-slate-400 w-16 text-right">{queueTime} ms</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Connection Setup */}
+              <div className="space-y-2 pt-2">
+                <span className="text-[11px] uppercase font-bold text-slate-500 tracking-wider">Connection Start</span>
+                <div className="flex items-center justify-between text-xs py-1 border-b border-slate-900">
+                  <span className="text-slate-300">DNS Lookup</span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-32 bg-slate-900 rounded-full h-2 overflow-hidden flex">
+                      <div className="bg-sky-400 h-full rounded-full" style={{ width: `${Math.min(100, (dnsTime / totalTime) * 100)}%` }} />
+                    </div>
+                    <span className="font-mono text-sky-400 w-16 text-right">{dnsTime} ms</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-xs py-1 border-b border-slate-900">
+                  <span className="text-slate-300">Initial Connection (TCP)</span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-32 bg-slate-900 rounded-full h-2 overflow-hidden flex">
+                      <div className="bg-amber-400 h-full rounded-full" style={{ width: `${Math.min(100, (connectTime / totalTime) * 100)}%` }} />
+                    </div>
+                    <span className="font-mono text-amber-400 w-16 text-right">{connectTime} ms</span>
+                  </div>
+                </div>
+                {sslTime > 0 && (
+                  <div className="flex items-center justify-between text-xs py-1 border-b border-slate-900">
+                    <span className="text-slate-300">SSL Handshake</span>
+                    <div className="flex items-center gap-3">
+                      <div className="w-32 bg-slate-900 rounded-full h-2 overflow-hidden flex">
+                        <div className="bg-purple-400 h-full rounded-full" style={{ width: `${Math.min(100, (sslTime / totalTime) * 100)}%` }} />
+                      </div>
+                      <span className="font-mono text-purple-400 w-16 text-right">{sslTime} ms</span>
                     </div>
                   </div>
-                );
-             })()}
-           </div>
+                )}
+              </div>
+
+              {/* Request / Response Execution */}
+              <div className="space-y-2 pt-2">
+                <span className="text-[11px] uppercase font-bold text-slate-500 tracking-wider">Request / Response</span>
+                <div className="flex items-center justify-between text-xs py-1 border-b border-slate-900">
+                  <span className="text-slate-300">Request Sent</span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-32 bg-slate-900 rounded-full h-2 overflow-hidden flex">
+                      <div className="bg-cyan-400 h-full rounded-full" style={{ width: `${Math.min(100, (sendTime / totalTime) * 100)}%` }} />
+                    </div>
+                    <span className="font-mono text-cyan-400 w-16 text-right">{sendTime} ms</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-xs py-1 border-b border-slate-900">
+                  <span className="text-slate-200 font-bold">Waiting for server response (TTFB)</span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-32 bg-slate-900 rounded-full h-2 overflow-hidden flex">
+                      <div className="bg-emerald-400 h-full rounded-full" style={{ width: `${Math.min(100, (ttfbTime / totalTime) * 100)}%` }} />
+                    </div>
+                    <span className="font-mono text-emerald-400 font-bold w-16 text-right">{ttfbTime} ms</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-xs py-1">
+                  <span className="text-slate-300">Content Download</span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-32 bg-slate-900 rounded-full h-2 overflow-hidden flex">
+                      <div className="bg-blue-400 h-full rounded-full" style={{ width: `${Math.min(100, (downloadTime / totalTime) * 100)}%` }} />
+                    </div>
+                    <span className="font-mono text-blue-400 w-16 text-right">{downloadTime} ms</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
         )}
+
+        {/* ============================================================ */}
+        {/* 6. TERMINAL CLI TAB                                          */}
+        {/* ============================================================ */}
+        {activeResTab === 'terminal' && (() => {
+          const method = result.config?.method || 'GET';
+          const url = result.config?.url || '';
+          let hostname = 'target-host';
+          try {
+            hostname = new URL(url).hostname;
+          } catch {
+            hostname = url;
+          }
+
+          return (
+            <div className="space-y-4 font-mono text-xs">
+              <div className="rounded-xl border border-slate-800/90 bg-[#07090F] overflow-hidden shadow-2xl">
+                {/* Terminal Header Chrome */}
+                <div className="flex items-center justify-between px-3.5 py-2 bg-[#0E121B] border-b border-slate-800/80 select-none">
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-bold ml-2">bash — curl transmission</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setWrapTerminalText(!wrapTerminalText)}
+                      className={cn(
+                        "text-[9.5px] px-2 py-0.5 rounded border transition-colors cursor-pointer",
+                        wrapTerminalText ? "bg-slate-800 text-emerald-400 border-slate-700" : "bg-black/50 text-slate-400 border-slate-800"
+                      )}
+                    >
+                      {wrapTerminalText ? 'Wrap ON' : 'Wrap OFF'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(curlCommandString);
+                        setCopiedCurl(true);
+                        setTimeout(() => setCopiedCurl(false), 2000);
+                      }}
+                      className="text-[9.5px] px-2 py-0.5 rounded bg-black/50 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 border border-slate-800 transition-colors flex items-center gap-1 cursor-pointer"
+                      title="Copy cURL command"
+                    >
+                      {copiedCurl ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
+                      <span>{copiedCurl ? 'COPIED cURL' : 'COPY cURL'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Terminal Body */}
+                <div className={cn("p-4 space-y-3 bg-[#05070B] text-slate-300", wrapTerminalText ? "whitespace-pre-wrap break-all" : "whitespace-pre overflow-x-auto")}>
+                  <div className="space-y-1">
+                    <div className="flex items-start gap-2 text-emerald-400">
+                      <span className="text-slate-500 select-none font-bold">$</span>
+                      <span className="font-bold text-white selection:bg-emerald-500/30">{curlCommandString}</span>
+                    </div>
+                  </div>
+
+                  {/* Wire Handshakes */}
+                  <div className="text-[11px] text-slate-500 space-y-0.5 border-l-2 border-slate-800 pl-3 my-2 select-none">
+                    <div>* Trying {hostname}...</div>
+                    <div>* Connected to {hostname} ({result.simulatedIp || '127.0.0.1'}) port {url.startsWith('https') ? '443' : '80'}</div>
+                    {result.simulatedCountry && (
+                      <div>* Simulated GeoIP Egress: {result.simulatedFlag} {result.simulatedCountry} ({result.simulatedRegion})</div>
+                    )}
+                    <div>* HTTP/1.1 {result.status} {isSuccess ? 'OK' : 'RESPONSE'} ({result.responseTime} ms)</div>
+                  </div>
+
+                  {result.error && (
+                    <div className="p-3 bg-rose-950/20 border border-rose-900/40 rounded text-rose-400 font-mono text-[11px] space-y-1">
+                      <div className="font-bold uppercase tracking-wider flex items-center gap-1.5">
+                        <AlertTriangle size={12} /> Execution Error:
+                      </div>
+                      <div>{result.error}</div>
+                    </div>
+                  )}
+
+                  {/* Wire output */}
+                  <div className="pt-2 border-t border-slate-900 space-y-2">
+                    <div className="text-[9.5px] uppercase font-bold text-slate-500 tracking-wider select-none flex items-center gap-1.5">
+                      <CornerDownRight size={11} className="text-emerald-400" /> STDOUT / WIRE TRANSCRIPT:
+                    </div>
+                    
+                    <pre className={cn(
+                      "font-mono text-xs leading-relaxed text-emerald-400/90 selection:bg-emerald-500/30",
+                      wrapTerminalText ? "whitespace-pre-wrap break-all" : "whitespace-pre"
+                    )}>
+                      {result.rawOutput ? result.rawOutput : (
+                        <>
+                          <span className="text-sky-400 font-bold block mb-1">
+                            HTTP/1.1 {result.status} {isSuccess ? 'OK' : ''}
+                          </span>
+                          {Object.entries(result.headers || {}).map(([k, v]) => (
+                            <span key={k} className="text-slate-400 block text-[11px]">
+                              <strong className="text-sky-300 font-semibold">{k}:</strong> {v}
+                            </span>
+                          ))}
+                          <span className="block my-2 text-slate-700">--- PAYLOAD BODY ---</span>
+                          <span className="text-slate-200 block">
+                            {result.body || '(empty response body)'}
+                          </span>
+                        </>
+                      )}
+                    </pre>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-900/80 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500 select-none">
+                    <div className="flex items-center gap-2">
+                      <span className={cn("w-2 h-2 rounded-full", isSuccess ? "bg-emerald-400" : "bg-rose-400")} />
+                      <span>Process completed with status <strong>{result.status}</strong> in <strong>{result.responseTime}ms</strong></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ============================================================ */}
+        {/* 7. ASSERTIONS TAB                                            */}
+        {/* ============================================================ */}
+        {activeResTab === 'assertions' && (() => {
+          const assertionResults = (result as any).assertions || [];
+          if (assertionResults.length === 0) {
+            return (
+              <div className="p-8 bg-[#0B0E14] border border-slate-850 rounded-xl text-slate-500 text-center font-mono text-xs space-y-2">
+                <ShieldCheck size={28} className="mx-auto text-slate-600" />
+                <div className="font-bold text-slate-400">NO TEST ASSERTIONS EVALUATED</div>
+                <p className="text-[11px] font-sans text-slate-500">Configure assertion rules (Status Code, Latency SLA, Body Contains) in the request parameters panel.</p>
+              </div>
+            );
+          }
+
+          const passedCount = assertionResults.filter((a: any) => a.passed).length;
+          const allPassed = passedCount === assertionResults.length;
+
+          return (
+            <div className="space-y-4 max-w-4xl font-sans">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono flex items-center gap-2">
+                  <ShieldCheck size={14} className={allPassed ? "text-emerald-400" : "text-rose-400"} />
+                  Test Assertions ({passedCount}/{assertionResults.length} Passed)
+                </h4>
+                <span className={cn(
+                  "px-2.5 py-1 rounded text-xs font-bold font-mono border",
+                  allPassed ? "bg-emerald-950/40 text-emerald-400 border-emerald-800/40" : "bg-rose-950/40 text-rose-400 border-rose-800/40"
+                )}>
+                  {allPassed ? 'ALL TESTS PASSED' : 'TESTS FAILED'}
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {assertionResults.map((item: any, idx: number) => (
+                  <div 
+                    key={idx} 
+                    className={cn(
+                      "p-3 rounded-lg border font-mono text-xs flex items-center justify-between",
+                      item.passed 
+                        ? "bg-emerald-950/20 border-emerald-800/40 text-emerald-300" 
+                        : "bg-rose-950/20 border-rose-800/40 text-rose-300"
+                    )}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      {item.passed ? <Check size={14} className="text-emerald-400 shrink-0" /> : <AlertTriangle size={14} className="text-rose-400 shrink-0" />}
+                      <div>
+                        <div className="font-bold">{item.rule?.type?.toUpperCase() || 'ASSERTION'}: {item.rule?.expected}</div>
+                        <div className="text-[11px] opacity-80 mt-0.5">{item.message}</div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-black/40">
+                      {item.passed ? 'PASS' : 'FAIL'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ============================================================ */}
+        {/* 8. SYSTEM TELEMETRY & CPU TAB                                */}
+        {/* ============================================================ */}
+        {activeResTab === 'metrics' && (() => {
+          const metrics = result.systemMetrics;
+          if (!metrics) {
+            return (
+              <div className="p-8 bg-[#0B0E14] border border-slate-850 rounded-xl text-slate-500 text-center font-mono text-xs">
+                No server compute telemetry recorded for this request.
+              </div>
+            );
+          }
+
+          return (
+            <div className="space-y-5 max-w-4xl font-sans">
+              <div className="border-b border-slate-800 pb-3">
+                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono flex items-center gap-2">
+                  <Cpu size={14} className="text-amber-400" /> Host Compute & Hardware Metrics
+                </h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">Real-time CPU execution slice and V8 heap footprint</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-[#0B0E14] border border-slate-850 rounded-xl p-4 space-y-1 font-mono">
+                  <div className="text-slate-500 text-[10px] uppercase font-bold flex items-center gap-1.5">
+                    <Zap size={11} className="text-amber-400" /> Request CPU Time
+                  </div>
+                  <div className="text-xl font-bold text-amber-400">{metrics.cpuTotalMs} ms</div>
+                  <div className="text-[10px] text-slate-400">User: {metrics.cpuUserMs}ms • Sys: {metrics.cpuSystemMs}ms</div>
+                </div>
+
+                <div className="bg-[#0B0E14] border border-slate-850 rounded-xl p-4 space-y-1 font-mono">
+                  <div className="text-slate-500 text-[10px] uppercase font-bold flex items-center gap-1.5">
+                    <HardDrive size={11} className="text-emerald-400" /> Memory Heap Used
+                  </div>
+                  <div className="text-xl font-bold text-emerald-400">{(metrics.memoryHeapUsedBytes / 1024 / 1024).toFixed(1)} MB</div>
+                  <div className="text-[10px] text-slate-400">Total Heap: {(metrics.memoryHeapTotalBytes / 1024 / 1024).toFixed(1)} MB</div>
+                </div>
+
+                <div className="bg-[#0B0E14] border border-slate-850 rounded-xl p-4 space-y-1 font-mono">
+                  <div className="text-slate-500 text-[10px] uppercase font-bold flex items-center gap-1.5">
+                    <Server size={11} className="text-sky-400" /> Host CPU Cores
+                  </div>
+                  <div className="text-xl font-bold text-sky-400">{metrics.cpuCores} Cores</div>
+                  <div className="text-[10px] text-slate-400 truncate" title={metrics.cpuModel}>{metrics.cpuModel || 'Virtual Container'}</div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
       </div>
+
+      {/* Resize Handle for desktop */}
       <div 
         onMouseDown={startResizeResponse}
-        className="hidden lg:flex h-2 hover:h-2 bg-[#11141A] border-t border-slate-900 hover:bg-emerald-500 cursor-row-resize items-center justify-center transition-all group z-10 shrink-0"
-        title="Drag down to resize Response box"
+        className="hidden lg:flex h-1.5 hover:h-1.5 bg-[#0A0D14] hover:bg-sky-500 cursor-row-resize items-center justify-center transition-all group z-10 shrink-0 border-t border-slate-850"
+        title="Drag up or down to resize response height"
       >
-        <div className="h-[2px] w-12 bg-slate-700 group-hover:bg-emerald-350 rounded" />
+        <div className="w-12 h-1 bg-slate-700 group-hover:bg-sky-300 rounded" />
       </div>
+
     </div>
   );
 }

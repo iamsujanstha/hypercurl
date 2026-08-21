@@ -1,10 +1,10 @@
 import React from 'react';
 import { Sun, Moon, ChevronDown, Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Telemetry } from '@/features/api-tester/types';
+import { Telemetry, AppView } from '@/features/api-tester/types';
 
 interface WorkspaceNavbarProps {
-  view: 'debugger' | 'lab' | 'variables' | 'history';
+  view: AppView;
   theme: 'dark' | 'light';
   setTheme: (theme: 'dark' | 'light') => void;
   telemetry: Telemetry;
@@ -24,6 +24,24 @@ export function WorkspaceNavbar({
   isSidebarCollapsed,
   setIsSidebarCollapsed
 }: WorkspaceNavbarProps) {
+  const getNavLabel = (v: AppView) => {
+    switch (v) {
+      case 'studio':
+      case 'debugger':
+      case 'autocannon':
+        return 'API STUDIO';
+      case 'suites':
+      case 'lab':
+        return 'TEST SUITES';
+      case 'variables':
+        return 'ENVIRONMENTS';
+      case 'history':
+        return 'AUDIT LOGS';
+      default:
+        return 'WORKSPACE';
+    }
+  };
+
   return (
     <nav className="flex items-center justify-between px-3 sm:px-4 h-12 border-b border-slate-850 bg-[#0F1115] shrink-0 select-none">
       <div className="flex items-center gap-2 sm:gap-5">
@@ -43,9 +61,9 @@ export function WorkspaceNavbar({
         </div>
         <div className="hidden sm:block h-4 w-px bg-slate-805"></div>
         <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-slate-500">
-          <span className="opacity-70 font-semibold uppercase">Workspace</span>
+          <span className="opacity-70 font-semibold uppercase">Mode</span>
           <span className="opacity-30">/</span>
-          <span className="text-emerald-400 font-bold uppercase">{view === 'debugger' ? 'API CLIENT' : view}</span>
+          <span className="text-emerald-400 font-bold uppercase">{getNavLabel(view)}</span>
         </div>
       </div>
       

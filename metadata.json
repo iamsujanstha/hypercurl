@@ -1,6 +1,6 @@
 {
   "name": "HyperCurl",
-  "description": "Minimal, production-grade API testing and concurrency engine powered by native curl.",
+  "description": "Production-grade API client and high-concurrency load testing suite powered by native curl and Autocannon.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

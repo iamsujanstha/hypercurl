@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid';
 import { RequestConfig, CurlResult } from '@/server/modules/curl-engine';
 import { ProgressUpdate } from '@/server/modules/runner';
-import { Tab, Collection, SavedRequest, Telemetry, DialogState, AssertionRule } from '@/features/api-tester/types';
+import { Tab, Collection, SavedRequest, Telemetry, DialogState, AssertionRule, AppView } from '@/features/api-tester/types';
 import { evaluateAssertions } from '@/features/api-tester/assertionEvaluator';
 
 export function useApiTesterState(initialVariables: Record<string, string> = {}) {
@@ -185,7 +185,7 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
 
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
-  const [view, setView] = useState<'debugger' | 'lab' | 'variables' | 'history'>('debugger');
+  const [view, setView] = useState<AppView>('studio');
 
   const [splitPercent, setSplitPercent] = useState(50);
   const [isDraggingSplit, setIsDraggingSplit] = useState(false);
@@ -374,8 +374,71 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
             }
             return t;
           }));
+        } else if (data.type === 'error') {
+          const tabId = data.tabId || activeTabIdRef.current;
+          setTabs(prev => prev.map(t => {
+            if (t.id === tabId) {
+              return {
+                ...t,
+                loading: false,
+                progress: null
+              };
+            }
+            return t;
+          }));
+          showCustomAlert('TEST SUITE ERROR', data.error || 'Test suite execution encountered an issue.');
         } else if (data.type === 'telemetry') {
           setTelemetry(data.payload);
+        } else if (data.type === 'autocannon-progress') {
+          const tabId = data.tabId || activeTabIdRef.current;
+          setTabs(prev => prev.map(t => {
+            if (t.id === tabId) {
+              return {
+                ...t,
+                loading: true,
+                autocannonProgress: data.progress
+              };
+            }
+            return t;
+          }));
+        } else if (data.type === 'autocannon-complete') {
+          const tabId = data.tabId || activeTabIdRef.current;
+          setTabs(prev => prev.map(t => {
+            if (t.id === tabId) {
+              return {
+                ...t,
+                loading: false,
+                autocannonProgress: null,
+                autocannonResult: data.result
+              };
+            }
+            return t;
+          }));
+        } else if (data.type === 'autocannon-error') {
+          const tabId = data.tabId || activeTabIdRef.current;
+          setTabs(prev => prev.map(t => {
+            if (t.id === tabId) {
+              return {
+                ...t,
+                loading: false,
+                autocannonProgress: null
+              };
+            }
+            return t;
+          }));
+          showCustomAlert('AUTOCANNON ERROR', data.error || 'Benchmark execution failed.');
+        } else if (data.type === 'autocannon-aborted') {
+          const tabId = data.tabId || activeTabIdRef.current;
+          setTabs(prev => prev.map(t => {
+            if (t.id === tabId) {
+              return {
+                ...t,
+                loading: false,
+                autocannonProgress: null
+              };
+            }
+            return t;
+          }));
         } else if (data.type === 'telemetry_real_math_done') {
           setDialog({
             isOpen: true,
@@ -674,6 +737,63 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
     const controller = new AbortController();
     setAbortController(controller);
 
+    const mode = activeTab.testMode || 'functional';
+
+    if (mode === 'load') {
+      handleStartAutocannon({
+        url: resolvedConfig.url,
+        method: resolvedConfig.method,
+        headers: resolvedConfig.headers,
+        body: resolvedConfig.body,
+        connections: activeTab.testConfig?.connections || 50,
+        duration: activeTab.testConfig?.duration || 10,
+        pipelining: activeTab.testConfig?.pipelining || 1,
+        rate: activeTab.testConfig?.rateLimit,
+        title: `${activeTab.name} Load Test`
+      });
+      return;
+    }
+
+    if (mode === 'race') {
+      handleStartLabTest('race', {
+        concurrency: activeTab.testConfig?.concurrency || 20,
+        iterations: activeTab.testConfig?.iterations || 20
+      });
+      return;
+    }
+
+    if (mode === 'security') {
+      handleStartLabTest('security_audit', {
+        securityChecks: activeTab.testConfig?.securityChecks || { sqli: true, xss: true, pathTraversal: true, headersAuditor: true }
+      });
+      return;
+    }
+
+    if (mode === 'chaos') {
+      handleStartLabTest('chaos', {
+        jitter: true,
+        chaosAmplitude: activeTab.testConfig?.chaosAmplitude || 60,
+        retries: activeTab.testConfig?.retries || 2
+      });
+      return;
+    }
+
+    if (mode === 'fuzz') {
+      handleStartLabTest('fuzzer', {
+        iterations: activeTab.testConfig?.iterations || 15,
+        fuzzChecks: activeTab.testConfig?.fuzzChecks || { keyDeletions: true, typeMutations: true, bufferOverflow: false }
+      });
+      return;
+    }
+
+    if (mode === 'distributed') {
+      handleStartLabTest('distributed', {
+        regions: activeTab.testConfig?.regions || ['us', 'eu', 'apac', 'latam'],
+        rotateIps: true
+      });
+      return;
+    }
+
     if (activeTab.batchMode) {
       if (!ws) return;
       updateActiveTab({ loading: true, batchResults: [] });
@@ -874,6 +994,22 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
 
   const handleStartLabTest = (moduleId: string, settings: any) => {
     if (!ws || !activeTab) return;
+    if (moduleId === 'autocannon' || moduleId === 'load') {
+      const resolved = getResolvedConfig(activeTab);
+      handleStartAutocannon({
+        url: resolved.url,
+        method: resolved.method,
+        headers: resolved.headers,
+        body: resolved.body,
+        connections: settings.connections || settings.concurrency || 50,
+        duration: settings.duration || (settings.iterations ? Math.min(60, Math.max(5, settings.iterations)) : 10),
+        pipelining: settings.pipelining || 1,
+        rate: settings.rate,
+        timeout: settings.timeout || 10,
+        title: `TestLab Autocannon Load Benchmark`
+      });
+      return;
+    }
     const nextLabResults = {
       ...(activeTab.labResults || {}),
       [moduleId]: []
@@ -899,6 +1035,45 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
         rotateIps: settings.rotateIps
       }
     }));
+  };
+
+  const handleStartAutocannon = (config: any) => {
+    if (!ws || !activeTab) return;
+    updateActiveTab({
+      loading: true,
+      autocannonProgress: {
+        elapsedSeconds: 0,
+        durationSeconds: config.duration || 10,
+        percent: 0,
+        currentRps: 0,
+        currentLatency: 0,
+        currentBytesPerSec: 0,
+        totalRequests: 0,
+        status2xx: 0,
+        status3xx: 0,
+        status4xx: 0,
+        status5xx: 0,
+        errors: 0,
+        timeouts: 0
+      }
+    });
+    ws.send(JSON.stringify({
+      type: 'run-autocannon',
+      tabId: activeTabId,
+      payload: config
+    }));
+  };
+
+  const handleAbortAutocannon = () => {
+    if (!ws || !activeTab) return;
+    ws.send(JSON.stringify({
+      type: 'abort-autocannon',
+      tabId: activeTabId
+    }));
+    updateActiveTab({
+      loading: false,
+      autocannonProgress: null
+    });
   };
 
   const addAssertion = (rule: AssertionRule) => {
@@ -969,6 +1144,8 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
       deleteCollection,
       saveToCollection,
       handleStartLabTest,
+      handleStartAutocannon,
+      handleAbortAutocannon,
       addAssertion,
       removeAssertion,
       updateAssertion

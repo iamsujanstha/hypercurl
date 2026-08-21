@@ -13,7 +13,8 @@ import {
   ApiClientWorkspace,
   WorkerPoolPopover,
   TerminalDialog,
-  HistoryList
+  HistoryList,
+  AutocannonStudio
 } from '@/features/api-tester';
 
 export function ApiTester({ variables: initialVariables = {} }: { variables?: Record<string, string> }) {
@@ -56,6 +57,8 @@ export function ApiTester({ variables: initialVariables = {} }: { variables?: Re
       closeTab,
       saveToCollection,
       handleStartLabTest,
+      handleStartAutocannon,
+      handleAbortAutocannon,
       addAssertion,
       removeAssertion,
       updateAssertion
@@ -108,7 +111,7 @@ export function ApiTester({ variables: initialVariables = {} }: { variables?: Re
         />
 
         {/* Tab Selection Header Bar */}
-        {(view === 'debugger' || view === 'lab') && (
+        {(view === 'studio' || view === 'suites' || view === 'debugger' || view === 'lab' || view === 'autocannon') && (
           <TabSystem 
             tabs={tabs}
             activeTabId={activeTabId}
@@ -121,10 +124,11 @@ export function ApiTester({ variables: initialVariables = {} }: { variables?: Re
         {/* Dynamic Workspace Switcher Panels */}
         <div className="flex-1 overflow-hidden relative">
           <AnimatePresence mode="wait">
-            {view === 'debugger' && (
+            {(view === 'studio' || view === 'debugger' || view === 'autocannon') && (
               <ApiClientWorkspace 
                 activeTab={activeTab}
                 activeTabId={activeTabId}
+                tabs={tabs}
                 updateActiveTab={updateActiveTab}
                 updateActiveConfig={updateActiveConfig}
                 saveToCollection={saveToCollection}
@@ -150,12 +154,16 @@ export function ApiTester({ variables: initialVariables = {} }: { variables?: Re
                 updateAssertion={updateAssertion}
                 variables={variables}
                 setVariables={setVariables}
+
+                handleStartAutocannon={handleStartAutocannon}
+                handleAbortAutocannon={handleAbortAutocannon}
+                telemetry={telemetry}
               />
             )}
 
-            {view === 'lab' && (
+            {(view === 'suites' || view === 'lab') && (
               <motion.div 
-                key="lab"
+                key="suites"
                 initial={{ opacity: 0, scale: 0.99 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.99 }}
@@ -171,8 +179,15 @@ export function ApiTester({ variables: initialVariables = {} }: { variables?: Re
                   progress={activeTab.progress}
                   results={activeTab.batchResults}
                   labResults={activeTab.labResults || {}}
+                  autocannonProgress={activeTab.autocannonProgress || null}
+                  autocannonResult={activeTab.autocannonResult || null}
                   onStart={handleStartLabTest}
                   onAbort={handleAbort}
+                  onStartAutocannon={handleStartAutocannon}
+                  onAbortAutocannon={handleAbortAutocannon}
+                  onClearAutocannon={() => {
+                    updateActiveTab({ autocannonResult: null, autocannonProgress: null, loading: false });
+                  }}
                   onChangeConfig={updateActiveConfig}
                   onClearLogs={(modId?: string) => {
                     if (modId) {

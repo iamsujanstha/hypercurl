@@ -1,9 +1,24 @@
 import { RequestConfig, CurlResult } from '@/server/modules/curl-engine';
 import { ProgressUpdate } from '@/server/modules/runner';
+import { AutocannonBenchmarkResult, AutocannonTickProgress } from '@/server/modules/autocannon-engine';
+import { SystemHardwareSpecs, RequestSystemMetrics } from '@/server/modules/system-metrics';
+
+export type { AutocannonBenchmarkResult, AutocannonTickProgress, SystemHardwareSpecs, RequestSystemMetrics };
 
 export const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'GRAPHQL'] as const;
 
 export type HttpMethod = typeof METHODS[number];
+
+export type AppView = 'studio' | 'suites' | 'variables' | 'history' | 'debugger' | 'lab' | 'autocannon';
+
+export type TestExecutionMode = 
+  | 'functional'
+  | 'load'
+  | 'race'
+  | 'security'
+  | 'chaos'
+  | 'fuzz'
+  | 'distributed';
 
 export interface AssertionRule {
   id: string;
@@ -91,6 +106,24 @@ export interface Tab {
   extractors?: ResponseExtractorRule[];
   authConfig?: AuthConfig;
   labResults?: Record<string, CurlResult[]>;
+  autocannonResult?: AutocannonBenchmarkResult | null;
+  autocannonProgress?: AutocannonTickProgress['progress'] | null;
+  testMode?: TestExecutionMode;
+  testConfig?: {
+    connections?: number;
+    duration?: number;
+    pipelining?: number;
+    rateLimit?: number;
+    iterations?: number;
+    concurrency?: number;
+    retries?: number;
+    jitter?: boolean;
+    chaosAmplitude?: number;
+    fuzzChecks?: { keyDeletions: boolean; typeMutations: boolean; bufferOverflow: boolean };
+    securityChecks?: { sqli: boolean; xss: boolean; pathTraversal: boolean; headersAuditor: boolean };
+    regions?: string[];
+    rotateIps?: boolean;
+  };
 }
 
 export interface Telemetry {
@@ -108,6 +141,7 @@ export interface Telemetry {
     task: string;
     activeTime: number;
   }[];
+  systemSpecs?: SystemHardwareSpecs;
 }
 
 export interface DialogState {
@@ -120,3 +154,4 @@ export interface DialogState {
   selectedColId?: string;
   onConfirm: (val1?: string, val2?: string) => void;
 }
+

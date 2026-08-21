@@ -119,19 +119,21 @@ export class RequestRunner {
             simulatedRegion = info.regionName;
 
             // Detect target protocol
-            const isHttps = finalRequest.url.toLowerCase().startsWith('https');
+            const isHttps = (finalRequest.url || '').toLowerCase().startsWith('https');
             const proto = isHttps ? 'https' : 'http';
             const port = isHttps ? '443' : '80';
 
             // Extract Host from context URL
             let hostHeader = '';
             try {
-              const urlParsed = new URL(finalRequest.url);
-              hostHeader = urlParsed.host;
+              if (finalRequest.url) {
+                const urlParsed = new URL(finalRequest.url);
+                hostHeader = urlParsed.host;
+              }
             } catch (err) {}
 
-            const headers = { 
-              ...finalRequest.headers,
+            const headers: Record<string, string> = { 
+              ...(finalRequest.headers || {}),
               // Standard Proxy IP routing headers (Title Case and lowercase variations)
               'X-Forwarded-For': simulatedIp,
               'x-forwarded-for': simulatedIp,
@@ -176,13 +178,13 @@ export class RequestRunner {
             headers['User-Agent'] = userAgents[Math.floor(Math.random() * userAgents.length)];
             finalRequest.headers = headers;
 
-            // Introduce regional routing roundtrip delays only for the explicit distributed lab test
+            // Introduce slight regional routing roundtrip delays only for the explicit distributed lab test
             if (testModule === 'distributed') {
               let baseLatency = 0;
-              if (region === 'us') baseLatency = Math.random() * 40 + 10;
-              else if (region === 'eu') baseLatency = Math.random() * 80 + 70;
-              else if (region === 'apac') baseLatency = Math.random() * 120 + 150;
-              else if (region === 'latam') baseLatency = Math.random() * 100 + 120;
+              if (region === 'us') baseLatency = Math.random() * 15 + 5;
+              else if (region === 'eu') baseLatency = Math.random() * 25 + 15;
+              else if (region === 'apac') baseLatency = Math.random() * 40 + 25;
+              else if (region === 'latam') baseLatency = Math.random() * 35 + 20;
               
               if (baseLatency > 0) {
                 await new Promise(r => setTimeout(r, baseLatency));
@@ -190,10 +192,10 @@ export class RequestRunner {
             }
           }
 
-        // 1. Race Detector: Extreme jittered clustering
+        // 1. Race Detector: Tight millisecond collision clustering
         if (testModule === 'race') {
-          // Force a very small random delay (0-20ms) to ensure requests hit the server in tight waves
-          await new Promise(r => setTimeout(r, Math.random() * 20));
+          // Force a very small random jitter (0-10ms) to ensure requests hit the server in tight waves
+          await new Promise(r => setTimeout(r, Math.random() * 10));
         }
 
         // 2. Payload Fuzzer: Sophisticated mutation
@@ -246,15 +248,15 @@ export class RequestRunner {
         // 4. Chaos Mode: Network and header corruption
         if (testModule === 'chaos') {
           // Randomly drop headers
-          const headerKeys = Object.keys(finalRequest.headers);
-          if (headerKeys.length > 0 && Math.random() > 0.7) {
+          const headers = { ...(finalRequest.headers || {}) };
+          const headerKeys = Object.keys(headers);
+          if (headerKeys.length > 0 && Math.random() > 0.5) {
             const target = headerKeys[Math.floor(Math.random() * headerKeys.length)];
-            const headers = { ...finalRequest.headers };
             delete headers[target];
             finalRequest.headers = headers;
           }
-          // High Jitter
-          await new Promise(r => setTimeout(r, Math.random() * 800));
+          // Responsive Jitter
+          await new Promise(r => setTimeout(r, Math.random() * 120));
         }
 
         // 5. Security Audit: Systematic Vulnerability Probes

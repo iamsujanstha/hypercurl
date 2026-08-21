@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Cpu, X, Plus, Minus, Zap } from 'lucide-react';
+import { Cpu, X, Plus, Minus, Zap, Server, HardDrive } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Telemetry } from '@/features/api-tester/types';
 
@@ -17,6 +17,14 @@ export function WorkerPoolPopover({
   telemetry,
   ws
 }: WorkerPoolPopoverProps) {
+  const specs = telemetry.systemSpecs;
+  const totalSysGB = specs?.totalMemoryBytes 
+    ? (specs.totalMemoryBytes / 1024 / 1024 / 1024).toFixed(1) 
+    : 'N/A';
+  const freeSysGB = specs?.freeMemoryBytes 
+    ? (specs.freeMemoryBytes / 1024 / 1024 / 1024).toFixed(1) 
+    : 'N/A';
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -25,11 +33,11 @@ export function WorkerPoolPopover({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -10, scale: 0.95 }}
           transition={{ duration: 0.15, ease: "easeOut" }}
-          className="absolute right-4 top-14 w-80 bg-[#12161E] border border-slate-800 rounded-lg shadow-2xl z-50 overflow-hidden font-mono text-xs text-slate-300"
+          className="absolute right-4 top-14 w-84 bg-[#12161E] border border-slate-800 rounded-lg shadow-2xl z-50 overflow-hidden font-mono text-xs text-slate-300"
         >
           <div className="p-3 border-b border-slate-800 bg-[#161B25] flex justify-between items-center select-none">
             <span className="text-[9px] font-black text-white tracking-widest uppercase flex items-center gap-2">
-              <Cpu size={12} className="text-emerald-500" /> WORKER_THREAD_POOL
+              <Cpu size={12} className="text-emerald-500" /> SYSTEM CORES & THREADS
             </span>
             <button 
               type="button"
@@ -40,8 +48,32 @@ export function WorkerPoolPopover({
             </button>
           </div>
 
-          <div className="px-3.5 py-2.5 bg-black/40 text-[9.5px] font-sans text-slate-400 border-b border-slate-800/40 leading-relaxed select-none">
-            Provides native multi-threaded concurrency. This distributes heavy API stress-testing workloads across isolated CPU cores to avoid blocking the server's primary event loop.
+          {/* Host Hardware Specifications Ribbon */}
+          {specs && (
+            <div className="p-3 bg-black/60 border-b border-slate-800/60 space-y-2 select-none">
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-slate-400 font-bold flex items-center gap-1.5">
+                  <Server size={11} className="text-sky-400" /> CPU CORES:
+                </span>
+                <span className="text-white font-black">{specs.cpuCores} Physical/Virtual Cores</span>
+              </div>
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-slate-400 font-bold flex items-center gap-1.5">
+                  <HardDrive size={11} className="text-emerald-400" /> HOST MEMORY:
+                </span>
+                <span className="text-emerald-400 font-bold">{freeSysGB} GB Free / {totalSysGB} GB ({specs.memoryUsagePercent}% Used)</span>
+              </div>
+              <div className="w-full h-1 bg-slate-900 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-emerald-500 rounded-full" 
+                  style={{ width: `${Math.min(100, Math.max(2, specs.memoryUsagePercent))}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="px-3.5 py-2 bg-black/30 text-[9px] font-sans text-slate-400 border-b border-slate-800/40 leading-relaxed select-none">
+            Native multi-threaded workers distribute concurrent load tests across CPU cores.
           </div>
 
           <div className="p-4 space-y-4">

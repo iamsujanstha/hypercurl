@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type TestModuleId = 'basic_query' | 'blast' | 'race' | 'replay' | 'load' | 'chaos' | 'fuzzer' | 'security_audit' | 'distributed';
+export type TestModuleId = 'basic_query' | 'blast' | 'race' | 'replay' | 'load' | 'chaos' | 'fuzzer' | 'security_audit' | 'distributed' | 'autocannon';
 
 export interface TestModule {
   id: TestModuleId;
@@ -19,7 +19,7 @@ export interface TestModule {
 export const TEST_MODULES: Omit<TestModule, 'icon'>[] = [
   {
     id: 'basic_query',
-    name: 'SINGLE_REQUEST',
+    name: 'CONTRACT & SCHEMA VERIFICATION',
     description: 'One-shot connection to inspect returns, header keys, response times, and validate JSON schemas.',
     color: 'text-cyan-400',
     bgColor: 'bg-cyan-500/20',
@@ -32,7 +32,7 @@ export const TEST_MODULES: Omit<TestModule, 'icon'>[] = [
   },
   {
     id: 'blast',
-    name: 'CONCURRENT_BLAST',
+    name: 'BURST CONCURRENCY STRESS',
     description: 'Floods target endpoints with concurrent bursts to identify sudden thread pool and socket saturation thresholds.',
     color: 'text-amber-400',
     bgColor: 'bg-amber-500/20',
@@ -45,7 +45,7 @@ export const TEST_MODULES: Omit<TestModule, 'icon'>[] = [
   },
   {
     id: 'race',
-    name: 'RACE_DETECTOR',
+    name: 'RACE CONDITION & ATOMICITY',
     description: 'Sub-millisecond writes engine targeting specific records to verify atomic locking or isolate dirty writes.',
     color: 'text-emerald-400',
     bgColor: 'bg-emerald-500/20',
@@ -58,7 +58,7 @@ export const TEST_MODULES: Omit<TestModule, 'icon'>[] = [
   },
   {
     id: 'replay',
-    name: 'REPLAY_GUARD',
+    name: 'IDEMPOTENCY & REPLAY AUDIT',
     description: 'Iterates transactions with locked authorization tokens to verify double-capture safeguards and idempotency.',
     color: 'text-blue-400',
     bgColor: 'bg-blue-500/20',
@@ -71,20 +71,20 @@ export const TEST_MODULES: Omit<TestModule, 'icon'>[] = [
   },
   {
     id: 'load',
-    name: 'LOAD_CANNON',
-    description: 'Extended continuous queue loops designed to stress garbage collection heaps, memory usage, and performance rot.',
-    color: 'text-fuchsia-400',
-    bgColor: 'bg-fuchsia-500/20',
-    borderColor: 'border-fuchsia-500/40',
-    strategy: 'SUSTAINED_PRESSURE',
-    settingsTitle: 'THROUGHPUT_CAP',
-    primaryMetric: 'HEAP_GROWTH_MB',
-    theory: 'Continuous load uncovers performance rot. Extended request streams are optimal for exposing client connection leaks, open file descriptor leaks, or slow unindexed query degradations.',
+    name: 'LOAD BENCHMARK (AUTOCANNON)',
+    description: 'High-speed HTTP benchmarking engine with connection pipelining (-p), concurrent sockets (-c), and latency percentiles.',
+    color: 'text-rose-400',
+    bgColor: 'bg-rose-500/20',
+    borderColor: 'border-rose-500/40',
+    strategy: 'AUTOCANNON_PIPELINING_ENGINE',
+    settingsTitle: 'AUTOCANNON_SETTINGS',
+    primaryMetric: 'RPS_&_LATENCY_P99',
+    theory: 'Autocannon delivers high-throughput socket pipelining benchmark testing. It stresses TCP socket multiplexing to evaluate max RPS throughput, connection saturation, and P99 latency percentiles.',
     category: 'perf'
   },
   {
     id: 'chaos',
-    name: 'CHAOS_MODE',
+    name: 'CHAOS & FAULT RESILIENCE',
     description: 'Randomly drops request headers and introduces network jitters to verify circuit breaker graceful fallbacks.',
     color: 'text-orange-400',
     bgColor: 'bg-orange-500/20',
@@ -97,7 +97,7 @@ export const TEST_MODULES: Omit<TestModule, 'icon'>[] = [
   },
   {
     id: 'fuzzer',
-    name: 'PAYLOAD_FUZZER',
+    name: 'SCHEMA & PAYLOAD FUZZER',
     description: 'Mutates variable structures, strips schema fields, and cascades large string buffers to test parser bounds.',
     color: 'text-purple-400',
     bgColor: 'bg-purple-500/20',
@@ -110,7 +110,7 @@ export const TEST_MODULES: Omit<TestModule, 'icon'>[] = [
   },
   {
     id: 'security_audit',
-    name: 'SECURITY_AUDITOR',
+    name: 'VULNERABILITY & OWASP AUDIT',
     description: 'Automated vulnerability sweep probing parameters against SQLi, tag XSS, and local traversal vectors.',
     color: 'text-rose-400',
     bgColor: 'bg-rose-500/20',
@@ -123,7 +123,7 @@ export const TEST_MODULES: Omit<TestModule, 'icon'>[] = [
   },
   {
     id: 'distributed',
-    name: 'DISTRIBUTED_LOAD',
+    name: 'GEO-DISTRIBUTED SIMULATION',
     description: 'Simulates multi-continent client routes by spoofing CDN origin headers, IP arrays, and regional ISP latencies.',
     color: 'text-indigo-400',
     bgColor: 'bg-indigo-500/20',
@@ -195,5 +195,11 @@ export const THEORETICAL_FRAMEWORKS: Record<TestModuleId, {
     solution: "DISTRIBUTED_LOAD simulates true worldwide traffic by rotating realistic geolocated client IP headers (such as `X-Forwarded-For`, `X-Real-IP`, `CF-Connecting-IP`, `True-Client-IP`, `Client-IP`) and user agents across workers. By distributing the load across multiple virtual geo-nodes (US, EU, APAC, LATAM), it checks whether your rate limit structures correctly separate multi-user traffic, bypassing artificial single-IP bottlenecks while ensuring regional firewalls, CDNs, and proxies run flawlessly.",
     realLifeExample: "A global service launches a mobile update. The backend applies a strict single-IP rate limit policy. However, because the API runs behind a multi-tier proxy cluster that is NOT configured with 'trust proxy', the application cluster identifies all inbound traffic as coming from the internal load balancer's single IP. The rate limiter fires instantly, blockading 99% of all global users with 429 Too Many Requests errors and causing a massive site-wide outage.",
     staffEngineeringDepth: "Configure strict 'trust proxy' configurations inside Express, Koa, or NestJS gateway routers to accurately process client headers while preventing header-spoofing attacks (arbitrary IP manipulation) from untrusted external sources. Always deploy multi-tiered rate limiting: rapid client-level rate limits (e.g., 5 requests/sec per IP) paired with broader, globally coordinated API gateway limits across all nodes. Also use CDN-level regional Edge rules (e.g. Cloudflare WAF Rate Limiting) to isolate heavy load prior to reaching origin servers."
+  },
+  autocannon: {
+    problem: "Traditional HTTP debugging utilities like curl or standard single-threaded request dispatchers cannot generate high socket concurrency. They create one connection at a time or are bottlenecked by local JavaScript event loops, making it impossible to uncover high-load socket saturation, kernel TCP backlog limits, memory leaks under peak traffic, or latency degradation curves.",
+    solution: "AUTOCANNON executes ultra-high-throughput concurrent HTTP/1.1 load benchmarking using C-optimized socket reuse, HTTP pipelining, and HDR-grade histogram tracking. It tests continuous saturation (up to tens of thousands of requests per second) directly in the UI without requiring terminal CLI commands.",
+    realLifeExample: "A backend service works flawlessly under standard 50 RPS curl checks, but when traffic surges to 5,000 RPS during an event, Node.js event-loop lag increases to 800ms and socket connection queues exhaust the server file descriptors. Autocannon exposes this exact breakdown point in a 10-second benchmark.",
+    staffEngineeringDepth: "Use HTTP/1.1 keep-alive connection pooling, socket pipelining, non-blocking I/O, and backpressure handling. Monitor p99 latency percentiles alongside raw throughput to detect GC pauses and event loop starvation under sustained concurrency."
   }
 };

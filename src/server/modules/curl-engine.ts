@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { v4 as uuidv4 } from 'uuid';
+import { SystemMetrics, RequestSystemMetrics } from './system-metrics';
 
 export interface RequestConfig {
   id?: string;
@@ -26,6 +27,7 @@ export interface CurlResult {
   simulatedRegion?: string;
   iterationIndex?: number;
   config?: RequestConfig;
+  systemMetrics?: RequestSystemMetrics;
 }
 
 export class CurlEngine {
@@ -104,12 +106,15 @@ export class CurlEngine {
     }).join(' ')}`;
     
     const startTime = Date.now();
+    const startCpu = process.cpuUsage();
+    const startMem = process.memoryUsage();
     const requestSize = config.body ? (typeof Buffer !== 'undefined' ? Buffer.byteLength(config.body, 'utf8') : config.body.length) : 0;
 
     if (signal?.aborted) {
       return {
         id, status: 0, headers: {}, body: '', responseTime: 0,
-        rawOutput: 'Aborted', error: 'Aborted', curlCommand, requestSize
+        rawOutput: 'Aborted', error: 'Aborted', curlCommand, requestSize,
+        systemMetrics: SystemMetrics.createRequestSnapshot(startCpu, startMem, 0)
       };
     }
 
@@ -177,6 +182,7 @@ export class CurlEngine {
 
       const res = await fetch(config.url, fetchOptions);
       const responseTime = Date.now() - startTime;
+      const systemMetrics = SystemMetrics.createRequestSnapshot(startCpu, startMem, responseTime);
       
       const resHeaders: Record<string, string> = {};
       const headerLines: string[] = [];
@@ -198,7 +204,8 @@ export class CurlEngine {
         responseTime,
         rawOutput,
         curlCommand,
-        requestSize
+        requestSize,
+        systemMetrics
       };
     } catch (err: any) {
       if (err.name === 'AbortError' || signal?.aborted) {
@@ -211,7 +218,8 @@ export class CurlEngine {
           rawOutput: 'Request aborted by user',
           error: 'Aborted',
           curlCommand,
-          requestSize
+          requestSize,
+          systemMetrics: SystemMetrics.createRequestSnapshot(startCpu, startMem, Date.now() - startTime)
         };
       }
 
@@ -232,7 +240,8 @@ export class CurlEngine {
             rawOutput: 'Request aborted by user',
             error: 'Aborted',
             curlCommand,
-            requestSize
+            requestSize,
+            systemMetrics: SystemMetrics.createRequestSnapshot(startCpu, startMem, Date.now() - startTime)
           });
         };
 
@@ -256,6 +265,7 @@ export class CurlEngine {
           if (signal?.aborted) return;
 
           const responseTime = Date.now() - startTime;
+          const systemMetrics = SystemMetrics.createRequestSnapshot(startCpu, startMem, responseTime);
           
           if (code !== 0 && code !== null) {
             resolve({
@@ -267,7 +277,8 @@ export class CurlEngine {
               rawOutput: `Fetch failed entirely (${err.message}). Fallback curl exited with code ${code}.\n\nCurl stderr: ${stderr}`,
               error: `Fetch error: ${err.message}. Curl error: ${stderr || `Exit code ${code}`}`,
               curlCommand,
-              requestSize
+              requestSize,
+              systemMetrics
             });
             return;
           }
@@ -275,7 +286,7 @@ export class CurlEngine {
           if (code === null) return;
 
           const result = this.parseOutput(stdout, id, responseTime, curlCommand);
-          resolve({ ...result, requestSize });
+          resolve({ ...result, requestSize, systemMetrics });
         });
       });
     }

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Activity, Clock, Server, ShieldAlert, ChevronDown, Repeat, Trash2, Globe, Terminal, Code2, Copy
+  Activity, Clock, Server, ShieldAlert, ChevronDown, Repeat, Trash2, Globe, Terminal, Code2, Copy, Flame, Check
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { RequestConfig, CurlResult } from '@/server/modules/curl-engine';
 import { ProgressUpdate } from '@/server/modules/runner';
-import { Telemetry } from '@/features/api-tester/types';
+import { Telemetry, AutocannonBenchmarkResult, AutocannonTickProgress } from '@/features/api-tester/types';
+import { AutocannonBenchmarkView } from '@/features/api-tester/components/AutocannonBenchmarkView';
 
 import { 
   TEST_MODULES as STATIC_TEST_MODULES, 
@@ -38,6 +39,7 @@ const getModuleIcon = (id: TestModuleId) => {
     case 'fuzzer': return <span className="font-sans font-bold">F</span>;
     case 'security_audit': return <span className="font-sans font-bold">S</span>;
     case 'distributed': return <span className="font-sans font-bold">D</span>;
+    case 'autocannon': return <span className="font-sans font-bold">A</span>;
   }
 };
 
@@ -49,22 +51,46 @@ const TEST_MODULES: TestModule[] = STATIC_TEST_MODULES.map(mod => ({
 
 interface TestLabProps {
   config: RequestConfig;
-  headersList: { id: string, key: string, value: string }[];
+  headersList: { id: string; key: string; value: string }[];
   ws: WebSocket | null;
   activeTabId: string;
   loading: boolean;
   progress: ProgressUpdate | null;
   results: CurlResult[];
   labResults?: Record<string, CurlResult[]>;
+  autocannonProgress?: AutocannonTickProgress['progress'] | null;
+  autocannonResult?: AutocannonBenchmarkResult | null;
   onStart: (moduleId: string, settings: any) => void;
   onAbort: () => void;
+  onStartAutocannon?: (config: any) => void;
+  onAbortAutocannon?: () => void;
+  onClearAutocannon?: () => void;
   onChangeConfig?: (updates: Partial<RequestConfig>) => void;
   onClearLogs?: (modId?: string) => void;
   telemetry: Telemetry;
 }
 
-export function TestLab({ config, headersList, ws, activeTabId, loading, progress, results: rawResults, labResults = {}, onStart, onAbort, onChangeConfig, onClearLogs, telemetry }: TestLabProps) {
-  const [selectedModule, setSelectedModule] = useState<TestModuleId>('basic_query');
+export function TestLab({
+  config,
+  headersList,
+  ws,
+  activeTabId,
+  loading,
+  progress,
+  results: rawResults,
+  labResults = {},
+  autocannonProgress,
+  autocannonResult,
+  onStart,
+  onAbort,
+  onStartAutocannon,
+  onAbortAutocannon,
+  onClearAutocannon,
+  onChangeConfig,
+  onClearLogs,
+  telemetry
+}: TestLabProps) {
+  const [selectedModule, setSelectedModule] = useState<TestModuleId>('load');
 
   const results = useMemo(() => {
     return labResults[selectedModule] || [];
@@ -77,17 +103,26 @@ export function TestLab({ config, headersList, ws, activeTabId, loading, progres
   const [retries, setRetries] = useState(0);
   const [labTab, setLabTab] = useState<'logs' | 'curl' | 'theory'>('logs');
 
+  // Autocannon specific settings
+  const [autocannonConnections, setAutocannonConnections] = useState(50);
+  const [autocannonDuration, setAutocannonDuration] = useState(10);
+  const [autocannonPipelining, setAutocannonPipelining] = useState(1);
+  const [autocannonRate, setAutocannonRate] = useState<number | undefined>(undefined);
+  const [autocannonTimeout, setAutocannonTimeout] = useState(10);
+
   const [fuzzerChecks, setFuzzerChecks] = useState({ keyDeletions: true, typeMutations: true, bufferOverflow: false });
   const [securityChecks, setSecurityChecks] = useState({ sqli: true, xss: true, pathTraversal: true, headersAuditor: true });
   const [chaosAmplitude, setChaosAmplitude] = useState(60);
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
   const [selectedRegions, setSelectedRegions] = useState<string[]>(['us', 'eu', 'apac', 'latam']);
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'perf' | 'resilience' | 'security'>('all');
   const [logDetailWidth, setLogDetailWidth] = useState(560);
   const [isDraggingLogDetail, setIsDraggingLogDetail] = useState(false);
+  const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null);
 
   const [windowWidth, setWindowWidth] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1024);
   const [activeMobileTab, setActiveMobileTab] = useState<'config' | 'results'>('config');
+
+  const isAutocannonMode = selectedModule === 'load' || selectedModule === 'autocannon';
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -100,11 +135,6 @@ export function TestLab({ config, headersList, ws, activeTabId, loading, progres
       setActiveMobileTab('results');
     }
   }, [loading]);
-
-  const onClearLogsRef = React.useRef(onClearLogs);
-  useEffect(() => {
-    onClearLogsRef.current = onClearLogs;
-  }, [onClearLogs]);
 
   useEffect(() => {
     setSelectedResult(null);
@@ -140,30 +170,32 @@ export function TestLab({ config, headersList, ws, activeTabId, loading, progres
     const headersConfig = config.headers || {};
     const headers = Object.entries(headersConfig).map(([k, v]) => `-H "${k}: ${v}"`).join(' ');
     const body = config.body ? `-d '${config.body}'` : '';
-    const baseCurl = `curl -X ${config.method} "${config.url || 'http://localhost:3000/api/endpoint'}" ${headers} ${body}`;
+    const baseCurl = `curl -X ${config.method || 'GET'} "${config.url || 'http://localhost:3000/api'}" ${headers} ${body}`.trim();
 
     switch (selectedModule) {
       case 'basic_query':
         return baseCurl;
-      case 'blast':
       case 'load':
+      case 'autocannon':
+        return `autocannon -c ${autocannonConnections} -d ${autocannonDuration} ${autocannonPipelining > 1 ? `-p ${autocannonPipelining}` : ''} -m ${config.method || 'GET'} ${headers} ${config.body ? `-b '${config.body}'` : ''} "${config.url || 'http://localhost:3000/api'}"`.replace(/\s+/g, ' ').trim();
+      case 'blast':
         return `seq ${totalIterations} | xargs -P ${concurrency} -I {} ${baseCurl}`;
       case 'race':
-        return `# Race Condition Collision Test\n# Launches sub-millisecond thread waves\nseq ${totalIterations} | xargs -P ${concurrency} -I {} ${baseCurl}`;
+        return `# Race Condition Collision Test (Sub-millisecond overlapping writes)\nseq ${totalIterations} | xargs -P ${concurrency} -I {} ${baseCurl}`;
       case 'replay':
-        return `# Replay Guard & Idempotency Audit\n# Submits duplicate transaction parameters sequentially\n${baseCurl}`;
+        return `# Replay Guard & Idempotency Audit\n${baseCurl}`;
       case 'chaos':
-        return `# Chaos Entropy Injection\n# Randomly mutates HTTP streams & corrupts headers\n${baseCurl}`;
+        return `# Chaos Entropy Injection\n${baseCurl}`;
       case 'fuzzer':
-        return `# Payload Mutation Schema Fuzzer\n# Dynamic type mutator and buffer limits checks\n${baseCurl}`;
+        return `# Payload Mutation Schema Fuzzer\n${baseCurl}`;
       case 'security_audit':
-        return `# Security Auditor Vulnerability Prober\n# Scans parameters for SQL Injection & Cross-Site Scripting\n${baseCurl}`;
+        return `# OWASP Security Vulnerability Prober\n${baseCurl}`;
       case 'distributed':
-        return `# Geographically Distributed Global CDN Simulation\n# Spoofs geo-located IP headers & tests global CDN routing rules\n${baseCurl}`;
+        return `# Multi-Region Global CDN Simulation\n${baseCurl}`;
       default:
         return baseCurl;
     }
-  }, [selectedModule, config, totalIterations, concurrency]);
+  }, [selectedModule, config, totalIterations, concurrency, autocannonConnections, autocannonDuration, autocannonPipelining]);
 
   // Compute Latency categories dynamically
   const latencyCategories = useMemo(() => {
@@ -243,6 +275,32 @@ export function TestLab({ config, headersList, ws, activeTabId, loading, progres
   }, [results, selectedModule]);
 
   const startTest = () => {
+    if (isAutocannonMode) {
+      if (onStartAutocannon) {
+        onStartAutocannon({
+          url: config.url || 'http://localhost:3000/api',
+          method: config.method || 'GET',
+          headers: config.headers,
+          body: config.body,
+          connections: autocannonConnections,
+          duration: autocannonDuration,
+          pipelining: autocannonPipelining,
+          rate: autocannonRate,
+          timeout: autocannonTimeout,
+          title: `Autocannon Load Test`
+        });
+      } else {
+        onStart(selectedModule, {
+          connections: autocannonConnections,
+          duration: autocannonDuration,
+          pipelining: autocannonPipelining,
+          rate: autocannonRate,
+          timeout: autocannonTimeout
+        });
+      }
+      return;
+    }
+
     let backendModuleId: string = selectedModule;
     let finalIterations = totalIterations;
     let finalConcurrency = concurrency;
@@ -251,8 +309,6 @@ export function TestLab({ config, headersList, ws, activeTabId, loading, progres
       backendModuleId = 'blast';
       finalIterations = 1;
       finalConcurrency = 1;
-    } else if (selectedModule === 'load') {
-      backendModuleId = 'blast';
     }
 
     onStart(selectedModule, {
@@ -270,13 +326,18 @@ export function TestLab({ config, headersList, ws, activeTabId, loading, progres
 
   const handleClearLogs = () => {
     setSelectedResult(null);
+    if (isAutocannonMode && onClearAutocannon) {
+      onClearAutocannon();
+    }
     if (onClearLogs) {
       onClearLogs(selectedModule);
     }
   };
 
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
+    setCopiedSnippet(id);
+    setTimeout(() => setCopiedSnippet(null), 2000);
   };
 
   const securityAudit = useMemo(() => {
@@ -458,52 +519,82 @@ export function TestLab({ config, headersList, ws, activeTabId, loading, progres
   }, [results, selectedModule, securityChecks]);
 
   return (
-    <div className="flex flex-col h-full bg-[#0B0D11] overflow-hidden text-slate-205">
-      {/* HUD Header */}
-      <div className="p-4 border-b border-[#1E293B] bg-[#0F1115] shrink-0 flex flex-col md:flex-row md:items-center justify-start gap-4">
-        {/* Dynamic Interactive Endpoint Changer - Direct Access */}
-        <div className="flex-1 w-full bg-[#0F1115] border border-slate-800 rounded-xl overflow-hidden focus-within:border-emerald-500/50 transition-all flex flex-col sm:flex-row items-stretch sm:items-center">
-          <div className="flex items-center gap-2 px-3 border-b sm:border-b-0 sm:border-r border-slate-800 shrink-0 bg-slate-900/30 h-11 select-none">
-            <span className="text-[10px] font-mono text-slate-500 uppercase font-bold tracking-wider select-none whitespace-nowrap">METHOD</span>
+    <div className="flex flex-col h-full bg-[#080A0F] overflow-hidden text-slate-200 font-sans">
+      {/* HUD Header with clear Test Suites branding & endpoint input */}
+      <div className="p-3 border-b border-[#1E293B] bg-[#0E121A] shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-md">
+        {/* Module Title & Explanation Badge */}
+        <div className="flex items-center gap-3 shrink-0">
+          <div className={cn(
+            "p-2 rounded-lg border",
+            isAutocannonMode ? "bg-rose-500/10 border-rose-500/30 text-rose-400" : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+          )}>
+            {isAutocannonMode ? <Flame size={18} /> : <ShieldAlert size={18} />}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xs font-black font-mono tracking-wider text-slate-100 uppercase">
+                TEST SUITES & STRESS LAB
+              </h2>
+              <span className={cn(
+                "text-[9px] font-mono font-bold px-1.5 py-0.5 rounded uppercase border",
+                isAutocannonMode 
+                  ? "bg-rose-500/20 text-rose-300 border-rose-500/40" 
+                  : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+              )}>
+                {isAutocannonMode ? '⚡ AUTOCANNON LOAD TEST' : '9 AUTOMATED SCENARIOS'}
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 font-mono">
+              {isAutocannonMode 
+                ? 'High-throughput socket benchmark with connections (-c), duration (-d), and pipelining (-p)'
+                : 'Concurreny bursts, atomic race collision, fuzzers, and OWASP vulnerability scans.'}
+            </p>
+          </div>
+        </div>
+
+        {/* Dynamic Interactive Endpoint Target Input */}
+        <div className="flex-1 w-full max-w-2xl bg-[#080A0F] border border-slate-800 rounded-xl overflow-hidden focus-within:border-cyan-500/60 transition-all flex flex-col sm:flex-row items-stretch sm:items-center shadow-inner">
+          <div className="flex items-center gap-2 px-3 border-b sm:border-b-0 sm:border-r border-slate-800 shrink-0 bg-slate-900/40 h-9 select-none">
+            <span className="text-[9px] font-mono text-slate-400 uppercase font-bold tracking-wider select-none">METHOD</span>
             <select
               value={config.method || 'GET'}
               onChange={(e) => onChangeConfig?.({ method: e.target.value as any })}
               className={cn(
-                "bg-transparent text-xs font-bold font-mono cursor-pointer outline-none border-none py-1 focus:ring-0 appearance-none pr-1 text-center min-w-[70px]",
+                "bg-transparent text-xs font-bold font-mono cursor-pointer outline-none border-none py-1 focus:ring-0 appearance-none pr-1 text-center min-w-[65px]",
                 config.method === 'GET' ? "text-emerald-400" :
-                config.method === 'POST' ? "text-blue-500" :
-                config.method === 'DELETE' ? "text-rose-500" : "text-amber-500"
+                config.method === 'POST' ? "text-blue-400" :
+                config.method === 'DELETE' ? "text-rose-400" : "text-amber-400"
               )}
             >
               {['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'GRAPHQL'].map(m => (
                 <option key={m} value={m} className="bg-[#0B0D11] text-white font-mono font-bold text-xs">{m}</option>
               ))}
             </select>
-            <ChevronDown size={11} className="text-slate-500 -ml-1.5 pointer-events-none" />
+            <ChevronDown size={11} className="text-slate-500 -ml-1 pointer-events-none" />
           </div>
 
-          <div className="flex-grow flex items-center gap-2 px-4 h-11">
-            <span className="text-[10px] font-mono text-slate-500 uppercase font-bold tracking-wider select-none shrink-0">URL</span>
+          <div className="flex-grow flex items-center gap-2 px-3 h-9">
+            <span className="text-[9px] font-mono text-slate-400 uppercase font-bold tracking-wider select-none shrink-0">URL</span>
             <input
               type="text"
               value={config.url || ''}
               onChange={(e) => onChangeConfig?.({ url: e.target.value })}
-              placeholder="Enter endpoint target URL..."
-              className="flex-grow bg-transparent text-xs sm:text-sm font-mono text-emerald-400 outline-none placeholder-slate-600 min-w-0 font-medium"
+              placeholder="Target URL endpoint (e.g. http://localhost:3000/api)..."
+              className="flex-grow bg-transparent text-xs font-mono text-cyan-300 outline-none placeholder-slate-600 min-w-0 font-medium"
             />
           </div>
         </div>
       </div>
 
-      {/* Mobile view sub-segmented control tabs (Config vs Results) */}
-      <div className="lg:hidden flex bg-[#0E121A] border-b border-slate-850 p-1.5 shrink-0 h-11 items-center gap-1.5 select-none w-full">
+      {/* Mobile sub-tab switcher */}
+      <div className="lg:hidden flex bg-[#0E121A] border-b border-slate-800 p-1.5 shrink-0 h-10 items-center gap-1.5 select-none w-full">
         <button
           onClick={() => setActiveMobileTab('config')}
           className={cn(
-            "flex-1 py-1.5 px-3 rounded text-[11px] font-mono font-black uppercase transition-all tracking-wider text-center cursor-pointer",
+            "flex-1 py-1 px-3 rounded text-[10px] font-mono font-black uppercase transition-all tracking-wider text-center cursor-pointer",
             activeMobileTab === 'config'
-              ? "bg-[#1E293B] text-emerald-400 border border-emerald-500/25 shadow-sm"
-              : "text-slate-500 hover:text-slate-300"
+              ? "bg-[#1E293B] text-emerald-400 border border-emerald-500/25"
+              : "text-slate-400 hover:text-slate-200"
           )}
           type="button"
         >
@@ -512,23 +603,23 @@ export function TestLab({ config, headersList, ws, activeTabId, loading, progres
         <button
           onClick={() => setActiveMobileTab('results')}
           className={cn(
-            "flex-1 py-1.5 px-3 rounded text-[11px] font-mono font-black uppercase transition-all tracking-wider text-center cursor-pointer relative",
+            "flex-1 py-1 px-3 rounded text-[10px] font-mono font-black uppercase transition-all tracking-wider text-center cursor-pointer relative",
             activeMobileTab === 'results'
-              ? "bg-[#1E293B] text-emerald-400 border border-emerald-500/25 shadow-sm"
-              : "text-slate-500 hover:text-slate-300"
+              ? "bg-[#1E293B] text-emerald-400 border border-emerald-500/25"
+              : "text-slate-400 hover:text-slate-200"
           )}
           type="button"
         >
-          LIVE FEED
+          LIVE RESULTS / CHARTS
           {loading && (
-            <span className="absolute right-3.5 top-2.5 w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            <span className="absolute right-3 top-2.5 w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
           )}
         </button>
       </div>
 
       {/* Main Multi-Pane Workspace Area */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* PANEL 2: Left Sidebar Config & Controls */}
+        {/* PANEL 1: Left Sidebar Config & Controls */}
         <motion.div 
           initial={false}
           animate={windowWidth >= 1024 ? { x: 0, opacity: 1, pointerEvents: "auto" as const } : { 
@@ -538,9 +629,9 @@ export function TestLab({ config, headersList, ws, activeTabId, loading, progres
           }}
           transition={{ type: "spring", stiffness: 350, damping: 30 }}
           className={cn(
-            "bg-[#0F1115] transition-shadow duration-200",
+            "bg-[#0E121A] transition-shadow duration-200",
             windowWidth >= 1024 
-              ? "w-[420px] shrink-0 border-r border-[#1E293B] h-full overflow-hidden" 
+              ? "w-[430px] shrink-0 border-r border-[#1E293B] h-full overflow-hidden" 
               : "absolute inset-0 w-full h-full overflow-hidden z-20 shadow-2xl"
           )}
         >
@@ -556,6 +647,16 @@ export function TestLab({ config, headersList, ws, activeTabId, loading, progres
             setIterationsPerUser={setIterationsPerUser}
             retries={retries}
             setRetries={setRetries}
+            autocannonConnections={autocannonConnections}
+            setAutocannonConnections={setAutocannonConnections}
+            autocannonDuration={autocannonDuration}
+            setAutocannonDuration={setAutocannonDuration}
+            autocannonPipelining={autocannonPipelining}
+            setAutocannonPipelining={setAutocannonPipelining}
+            autocannonRate={autocannonRate}
+            setAutocannonRate={setAutocannonRate}
+            autocannonTimeout={autocannonTimeout}
+            setAutocannonTimeout={setAutocannonTimeout}
             securityChecks={securityChecks}
             setSecurityChecks={setSecurityChecks}
             fuzzerChecks={fuzzerChecks}
@@ -574,7 +675,7 @@ export function TestLab({ config, headersList, ws, activeTabId, loading, progres
           />
         </motion.div>
 
-        {/* PANEL 3: Right Live Telemetry Screen */}
+        {/* PANEL 2: Right Live Telemetry & Results Screen */}
         <motion.div 
           initial={false}
           animate={windowWidth >= 1024 ? { x: 0, opacity: 1, pointerEvents: "auto" as const } : { 
@@ -584,193 +685,207 @@ export function TestLab({ config, headersList, ws, activeTabId, loading, progres
           }}
           transition={{ type: "spring", stiffness: 350, damping: 30 }}
           className={cn(
-            "bg-[#07080A] flex flex-col overflow-hidden",
+            "bg-[#080A0F] flex flex-col overflow-hidden",
             windowWidth >= 1024 
               ? "flex-1 h-full" 
               : "absolute inset-0 w-full h-full z-10"
           )}
         >
-          {/* Telemetry values with clean typography */}
-          <div className="p-5 border-b border-slate-800 bg-black/60 grid grid-cols-2 md:grid-cols-4 gap-6 select-none shadow-[inset_0_-2px_10px_rgba(0,0,0,0.5)] shrink-0">
-             <div className="space-y-1.5 border-r border-slate-900 pr-4">
-                <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                   <Activity size={12} className="text-emerald-400" /> Current RPS
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-white font-mono leading-none">
-                   {progress ? ((progress.completed / ((Date.now() - (progress as any).startTime || 1) / 1000)).toFixed(1)) : '0.0'}
-                   <span className="text-xs text-slate-500 ml-1">/sec</span>
-                </div>
-             </div>
-             <div className="space-y-1.5 border-r border-slate-900 pr-4">
-                <div className="text-[10px] font-black text-slate-405 uppercase tracking-wider flex items-center gap-1.5">
-                   <Clock size={12} className="text-blue-400" /> P95 Latency
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-white font-mono leading-none">
-                   {results.length > 0 ? results[Math.floor(results.length * 0.95)]?.responseTime || '0' : '0'}
-                   <span className="text-xs text-slate-500 ml-1">ms</span>
-                </div>
-             </div>
-             <div className="space-y-1.5 border-r border-slate-900 pr-4">
-                <div className="text-[10px] font-black text-slate-405 uppercase tracking-wider flex items-center gap-1.5">
-                   <Server size={12} className="text-amber-400" /> Success Rate
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-white font-mono leading-none">
-                   {results.length > 0 ? Math.round((results.filter(r => r.status < 400).length / results.length) * 100) : '0'}
-                   <span className="text-xs text-slate-500 ml-1">%</span>
-                </div>
-             </div>
-             <div className="space-y-1.5">
-                <div className="text-[10px] font-black text-rose-450 uppercase tracking-wider flex items-center gap-1.5">
-                   <ShieldAlert size={12} className="text-rose-400" /> Errors
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-rose-400 font-mono leading-none">
-                   {results.filter(r => r.status >= 400).length}
-                </div>
-             </div>
-          </div>
-
-          {/* Navigation headers */}
-          <div className="flex items-center justify-between border-b border-slate-800 bg-[#0B0D11]/95 px-4 shrink-0 shadow">
-             <div className="flex">
-                {[
-                  { id: 'logs', label: 'TELEMETRY LIVE LOGS' },
-                  { id: 'curl', label: 'CURL ORCHESTRATION' },
-                  { id: 'theory', label: 'THEORETICAL FRAMEWORK' }
-                ].map(tab => (
-                  <button 
-                    key={tab.id}
-                    onClick={() => setLabTab(tab.id as any)}
-                    className={cn(
-                      "px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-b-2 font-mono outline-none focus:ring-0 select-none cursor-pointer",
-                      labTab === tab.id ? "border-emerald-500 text-white font-black" : "border-transparent text-slate-400 hover:text-slate-255"
-                    )}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-             </div>
-             {labTab === 'logs' && results.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleClearLogs}
-                  className="px-3 py-1.5 rounded-md hover:bg-slate-850 border border-slate-800 text-[10px] text-rose-400 font-mono font-black uppercase tracking-wider flex items-center gap-1.5 transition-all select-none cursor-pointer"
+          {/* Top sub-tabs for Results vs Terminal CLI vs Theoretical Guide */}
+          <div className="flex items-center justify-between border-b border-slate-800 bg-[#0E121A] px-4 shrink-0 shadow h-11">
+            <div className="flex">
+              {[
+                { id: 'logs', label: isAutocannonMode ? 'AUTOCANNON BENCHMARK & CHARTS' : 'TELEMETRY LIVE LOGS' },
+                { id: 'curl', label: 'TERMINAL & CLI TAGS' },
+                { id: 'theory', label: 'THEORETICAL FRAMEWORK' }
+              ].map(tab => (
+                <button 
+                  key={tab.id}
+                  onClick={() => setLabTab(tab.id as any)}
+                  className={cn(
+                    "px-4 h-11 text-[10px] font-black uppercase tracking-wider transition-all border-b-2 font-mono outline-none select-none cursor-pointer flex items-center gap-1.5",
+                    labTab === tab.id 
+                      ? isAutocannonMode ? "border-rose-500 text-rose-300 font-black" : "border-emerald-500 text-white font-black" 
+                      : "border-transparent text-slate-400 hover:text-slate-200"
+                  )}
                 >
-                  <Trash2 size={12} className="text-rose-400 animate-pulse" /> Clear Telemetry logs
+                  {tab.id === 'logs' && isAutocannonMode && <Flame size={13} className="text-rose-400" />}
+                  {tab.id === 'curl' && <Terminal size={13} className="text-cyan-400" />}
+                  {tab.label}
                 </button>
-             )}
+              ))}
+            </div>
+
+            {labTab === 'logs' && ((isAutocannonMode && autocannonResult) || (!isAutocannonMode && results.length > 0)) && (
+              <button
+                type="button"
+                onClick={handleClearLogs}
+                className="px-2.5 py-1 rounded-md hover:bg-slate-800 border border-slate-800 text-[10px] text-rose-400 font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all select-none cursor-pointer"
+              >
+                <Trash2 size={12} className="text-rose-400" /> Clear Results
+              </button>
+            )}
           </div>
 
           {/* Active Tab Screen Area */}
           <div className="flex-1 overflow-hidden relative flex">
-             <AnimatePresence mode="wait">
-                {labTab === 'logs' && (
-                  <div className="flex-1 flex overflow-hidden relative">
-                    <TestLabResults 
-                      results={results}
-                      loading={loading}
-                      progress={progress}
-                      selectedModule={selectedModule}
-                      
-                      percentiles={percentiles}
-                      latencyCategories={latencyCategories}
-                      regionalBreakdown={regionalBreakdown}
-                      securityAudit={securityAudit}
-                      activeModule={activeModule}
-                      selectedResult={selectedResult}
-                      setSelectedResult={setSelectedResult}
-                      payloadTab={payloadTab}
-                      setPayloadTab={setPayloadTab}
-                      logDetailWidth={logDetailWidth}
-                      setIsDraggingLogDetail={setIsDraggingLogDetail}
-                      
-                      handleClearLogs={handleClearLogs}
-                      config={config}
-                    />
-
-                    {/* Collapsible log detail side panel */}
-                    {selectedResult && (
-                      <TestLabResultDetail 
+            <AnimatePresence mode="wait">
+              {labTab === 'logs' && (
+                <div className="flex-1 flex overflow-hidden relative">
+                  {/* If Autocannon load module is selected, render AutocannonBenchmarkView */}
+                  {isAutocannonMode ? (
+                    <div className="flex-1 flex flex-col overflow-hidden bg-[#080A0F]">
+                      <AutocannonBenchmarkView 
+                        isExecuting={loading}
+                        autocannonProgress={autocannonProgress || null}
+                        autocannonResult={autocannonResult || null}
+                        onStartBenchmark={startTest}
+                        onAbortBenchmark={onAbortAutocannon || onAbort}
+                        onClearResults={onClearAutocannon}
+                        targetMethod={config.method || 'GET'}
+                        targetUrl={config.url || 'http://localhost:3000/api'}
+                        connections={autocannonConnections}
+                        duration={autocannonDuration}
+                        pipelining={autocannonPipelining}
+                      />
+                    </div>
+                  ) : (
+                    /* Other modules render TestLabResults */
+                    <div className="flex-1 flex overflow-hidden relative">
+                      <TestLabResults 
+                        results={results}
+                        loading={loading}
+                        progress={progress}
+                        selectedModule={selectedModule}
+                        percentiles={percentiles}
+                        latencyCategories={latencyCategories}
+                        regionalBreakdown={regionalBreakdown}
+                        securityAudit={securityAudit}
+                        activeModule={activeModule}
                         selectedResult={selectedResult}
                         setSelectedResult={setSelectedResult}
                         payloadTab={payloadTab}
                         setPayloadTab={setPayloadTab}
                         logDetailWidth={logDetailWidth}
                         setIsDraggingLogDetail={setIsDraggingLogDetail}
+                        handleClearLogs={handleClearLogs}
                         config={config}
                       />
-                    )}
+
+                      {/* Collapsible log detail side panel */}
+                      {selectedResult && (
+                        <TestLabResultDetail 
+                          selectedResult={selectedResult}
+                          setSelectedResult={setSelectedResult}
+                          payloadTab={payloadTab}
+                          setPayloadTab={setPayloadTab}
+                          logDetailWidth={logDetailWidth}
+                          setIsDraggingLogDetail={setIsDraggingLogDetail}
+                          config={config}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {labTab === 'curl' && (
+                <motion.div 
+                  key="curlTab"
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -5 }}
+                  className="absolute inset-0 p-6 overflow-y-auto custom-scrollbar bg-[#080A0F]"
+                >
+                  <div className="max-w-3xl space-y-6">
+                    {/* Autocannon Terminal Command */}
+                    <div className="space-y-2 select-text bg-[#0E121A] p-4 rounded-xl border border-slate-800">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-mono font-black text-rose-400 uppercase tracking-wider flex items-center gap-2">
+                          <Flame size={15} className="text-rose-400" />
+                          Autocannon Load Testing Command
+                        </span>
+                        <button 
+                          onClick={() => copyToClipboard(curlStrategy, 'ac')}
+                          className="text-slate-400 hover:text-white transition-colors p-1.5 rounded hover:bg-slate-800 flex items-center gap-1 text-xs font-mono"
+                        >
+                          {copiedSnippet === 'ac' ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                          <span>{copiedSnippet === 'ac' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                      <pre className="bg-black p-3.5 rounded-lg border border-slate-800 text-xs font-mono text-rose-300 break-all whitespace-pre-wrap leading-relaxed select-all">
+                        {curlStrategy}
+                      </pre>
+                      <p className="text-[11px] font-mono text-slate-400">
+                        Run this in any terminal with <code className="text-white bg-slate-800 px-1 py-0.5 rounded">npm i -g autocannon</code> to execute identical load benchmarks.
+                      </p>
+                    </div>
+
+                    {/* Standard cURL Snippet */}
+                    <div className="space-y-2 select-text bg-[#0E121A] p-4 rounded-xl border border-slate-800">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-mono font-black text-blue-400 uppercase tracking-wider flex items-center gap-2">
+                          <Globe size={15} className="text-blue-400" />
+                          Standard cURL HTTP Probe
+                        </span>
+                        <button 
+                          onClick={() => {
+                            const headersConfig = config.headers || {};
+                            const textToCopy = `curl -X ${config.method || 'GET'} "${config.url || 'http://localhost:3000/api'}"${Object.entries(headersConfig).length > 0 ? ` \\\n  ${Object.entries(headersConfig).map(([k, v]) => `-H "${k}: ${v}"`).join(' \\\n  ')}` : ''}${config.body ? ` \\\n  -d '${config.body}'` : ''}`;
+                            copyToClipboard(textToCopy, 'curl');
+                          }}
+                          className="text-slate-400 hover:text-white transition-colors p-1.5 rounded hover:bg-slate-800 flex items-center gap-1 text-xs font-mono"
+                        >
+                          {copiedSnippet === 'curl' ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                          <span>{copiedSnippet === 'curl' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                      <pre className="bg-black p-3.5 rounded-lg border border-slate-800 text-xs font-mono text-blue-300 break-all whitespace-pre-wrap leading-relaxed select-all">
+                        {`curl -X ${config.method || 'GET'} "${config.url || 'http://localhost:3000/api'}" \\\n  ${Object.entries(config.headers || {}).map(([k, v]) => `-H "${k}: ${v}"`).join(' \\\n  ')}${config.body ? ` \\\n  -d '${config.body}'` : ''}`}
+                      </pre>
+                    </div>
+
+                    {/* Tag Options Reference Matrix */}
+                    <div className="space-y-3 bg-[#0E121A] p-4 rounded-xl border border-slate-800">
+                      <div className="text-xs font-mono font-black text-emerald-400 uppercase tracking-wider flex items-center gap-2">
+                        <Terminal size={15} />
+                        Terminal CLI Flags Reference
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-mono">
+                        <div className="p-2.5 rounded bg-black border border-slate-800 space-y-0.5">
+                          <div className="text-rose-400 font-bold">-c, --connections &lt;N&gt;</div>
+                          <div className="text-slate-400 text-[11px]">Number of concurrent TCP sockets / client connections (default 10)</div>
+                        </div>
+                        <div className="p-2.5 rounded bg-black border border-slate-800 space-y-0.5">
+                          <div className="text-blue-400 font-bold">-d, --duration &lt;SEC&gt;</div>
+                          <div className="text-slate-400 text-[11px]">Benchmark execution duration in seconds (default 10s)</div>
+                        </div>
+                        <div className="p-2.5 rounded bg-black border border-slate-800 space-y-0.5">
+                          <div className="text-amber-400 font-bold">-p, --pipelining &lt;N&gt;</div>
+                          <div className="text-slate-400 text-[11px]">Number of pipelined HTTP requests sent per TCP socket (default 1)</div>
+                        </div>
+                        <div className="p-2.5 rounded bg-black border border-slate-800 space-y-0.5">
+                          <div className="text-emerald-400 font-bold">-m, --method &lt;VERB&gt;</div>
+                          <div className="text-slate-400 text-[11px]">HTTP method to execute (GET, POST, PUT, DELETE, PATCH, GRAPHQL)</div>
+                        </div>
+                        <div className="p-2.5 rounded bg-black border border-slate-800 space-y-0.5">
+                          <div className="text-purple-400 font-bold">-H, --headers &lt;KEY:VAL&gt;</div>
+                          <div className="text-slate-400 text-[11px]">Custom HTTP request header string (can be specified multiple times)</div>
+                        </div>
+                        <div className="p-2.5 rounded bg-black border border-slate-800 space-y-0.5">
+                          <div className="text-cyan-400 font-bold">-b, --body &lt;PAYLOAD&gt;</div>
+                          <div className="text-slate-400 text-[11px]">HTTP request body data string for POST/PUT mutations</div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                )}
+                </motion.div>
+              )}
 
-                {labTab === 'curl' && (
-                  <motion.div 
-                    key="curlTab"
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -5 }}
-                    className="absolute inset-0 p-6 overflow-y-auto custom-scrollbar bg-black"
-                  >
-                     <div className="max-w-2xl space-y-6">
-                        <div className="space-y-2 select-text">
-                           <div className="flex items-center justify-between">
-                              <span className="text-xs font-black text-slate-300 uppercase tracking-widest flex items-center gap-2">
-                                <Globe size={15} className="text-blue-400" /> Endpoint HTTP curl snippet
-                              </span>
-                              <button 
-                                onClick={() => {
-                                  const headersConfig = config.headers || {};
-                                  const textToCopy = selectedModule === 'distributed' ? 
-                                    `curl -X ${config.method} "${config.url || 'http://localhost:3000/api'}" \\\n  -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \\\n  -H "X-Forwarded-For: 54.210.23.42" \\\n  -H "X-Real-IP: 54.210.23.42" \\\n  -H "CF-Connecting-IP: 54.210.23.42" \\\n  -H "True-Client-IP: 54.210.23.42" \\\n  -H "Client-IP: 54.210.23.42"${Object.entries(headersConfig).length > 0 ? ` \\\n  ${Object.entries(headersConfig).map(([k, v]) => `-H "${k}: ${v}"`).join(' \\\n  ')}` : ''}${config.body ? ` \\\n  -d '${config.body}'` : ''}` :
-                                    `curl -X ${config.method} "${config.url || 'http://localhost:3000/api'}"${Object.entries(headersConfig).length > 0 ? ` \\\n  ${Object.entries(headersConfig).map(([k, v]) => `-H "${k}: ${v}"`).join(' \\\n  ')}` : ''}${config.body ? ` \\\n  -d '${config.body}'` : ''}`;
-                                  copyToClipboard(textToCopy);
-                                }}
-                                className="text-slate-400 hover:text-white transition-colors p-1"
-                              >
-                                <Copy size={15} />
-                              </button>
-                           </div>
-                           <pre className="bg-[#0F1115] p-3.5 rounded-lg border border-slate-800 text-xs font-mono text-blue-350 break-all whitespace-pre-wrap leading-relaxed select-all">
-                              {selectedModule === 'distributed' ? (
-                                `curl -X ${config.method} "${config.url || 'http://localhost:3000/api'}" \\
-  -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \\
-  -H "X-Forwarded-For: 54.210.23.42" \\
-  -H "X-Real-IP: 54.210.23.42" \\
-  -H "CF-Connecting-IP: 54.210.23.42" \\
-  -H "True-Client-IP: 54.210.23.42" \\
-  -H "Client-IP: 54.210.23.42" ${Object.entries(config.headers || {}).map(([k, v]) => `\\\n  -H "${k}: ${v}"`).join('')}${config.body ? ` \\\n  -d '${config.body}'` : ''}`
-                              ) : (
-                                `curl -X ${config.method} "${config.url || 'http://localhost:3000/api'}" \\\n  ${Object.entries(config.headers || {}).map(([k, v]) => `-H "${k}: ${v}"`).join(' \\\n  ')}${config.body ? ` \\\n  -d '${config.body}'` : ''}`
-                              )}
-                           </pre>
-                        </div>
-
-                        <div className="space-y-2 select-text">
-                           <div className="flex items-center justify-between">
-                              <span className="text-xs font-black text-slate-300 uppercase tracking-widest flex items-center gap-2">
-                                <Code2 size={15} className="text-emerald-400" /> Orchestrated bash script template
-                              </span>
-                              <button 
-                                onClick={() => copyToClipboard(curlStrategy)}
-                                className="text-slate-400 hover:text-white transition-colors p-1"
-                              >
-                                <Copy size={15} />
-                              </button>
-                           </div>
-                           <pre className="bg-[#0F1115] p-4 rounded-lg border border-slate-800 text-xs font-mono text-emerald-400 overflow-x-auto custom-scrollbar leading-relaxed">
-                              {curlStrategy}
-                           </pre>
-                           <p className="text-xs text-slate-400 font-mono uppercase italic leading-normal">
-                              Note: This script initializes concurrent worker nodes to match the backend runner sequence.
-                           </p>
-                        </div>
-                     </div>
-                  </motion.div>
-                )}
-
-                {labTab === 'theory' && (
-                  <TestLabTheory activeModule={activeModule} />
-                )}
-             </AnimatePresence>
+              {labTab === 'theory' && (
+                <TestLabTheory activeModule={activeModule} />
+              )}
+            </AnimatePresence>
           </div>
         </motion.div>
       </div>

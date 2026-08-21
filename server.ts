@@ -7,13 +7,15 @@ import { Worker } from "node:worker_threads";
 import { CurlEngine, RequestConfig, CurlResult } from "./src/server/modules/curl-engine";
 import { RequestRunner, BatchConfig, getRandomRegionIp } from "./src/server/modules/runner";
 import { Store } from "./src/server/modules/store";
+import { AutocannonEngine, AutocannonConfig } from "./src/server/modules/autocannon-engine";
+import { SystemMetrics } from "./src/server/modules/system-metrics";
 
 async function startServer() {
   await Store.init();
   const app = express();
   const server = createServer(app);
   const wss = new WebSocketServer({ server });
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const PORT = 3000;
 
   app.use(express.json());
 
@@ -62,6 +64,45 @@ async function startServer() {
       console.error("Error saving collection:", error);
       res.status(500).json({ error: error.message });
     }
+  });
+
+  // Autocannon Benchmark REST API Routes
+  app.post("/api/autocannon/run", async (req, res) => {
+    try {
+      const config: AutocannonConfig = req.body;
+      if (!config || !config.url) {
+        res.status(400).json({ error: "Missing required 'url' property in request body." });
+        return;
+      }
+      const runKey = `rest-ac-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const result = await AutocannonEngine.run(runKey, config);
+      await Store.addToHistory({
+        request: {
+          url: config.url,
+          method: config.method || 'GET',
+          headers: config.headers || {},
+          body: config.body
+        },
+        batch: {
+          iterations: result.totalRequests,
+          concurrency: config.connections,
+          successCount: result.statusCodes['2xx'],
+          avgResponseTime: result.latency.average
+        }
+      });
+      res.json(result);
+    } catch (error: any) {
+      console.error("Autocannon execution error:", error);
+      res.status(500).json({ error: error.message || "Autocannon benchmark failed" });
+    }
+  });
+
+  app.post("/api/autocannon/stop", (req, res) => {
+    const { key } = req.body || {};
+    if (key) {
+      AutocannonEngine.stop(key);
+    }
+    res.json({ success: true, message: "Autocannon benchmark stop signal dispatched." });
   });
 
   // Moved Race Demo Routes under /api
@@ -191,8 +232,18 @@ async function startServer() {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
+  app.get("/api/system/specs", (req, res) => {
+    try {
+      const specs = SystemMetrics.getSpecs();
+      res.json(specs);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // WebSocket for real-time batch execution
   const activeBatches = new Map<WebSocket, AbortController>();
+  const activeAutocannonRuns = new Map<WebSocket, string>();
 
   // --- REAL NODE.JS MULTI-THREADED WORKER POOL (using native worker_threads) ---
   interface RealWorkerInfo {
@@ -523,7 +574,8 @@ async function startServer() {
         latency: `${systemLatency}ms`,
         redisType: process.env.REDIS_URL ? "PRODUCTION" : "IN_MEMORY_CACHE",
         clientCount,
-        spawnedWorkers: spawnedWorkersList
+        spawnedWorkers: spawnedWorkersList,
+        systemSpecs: SystemMetrics.getSpecs()
       }
     };
     
@@ -553,7 +605,8 @@ async function startServer() {
         latency: "10ms",
         redisType: process.env.REDIS_URL ? "PRODUCTION" : "IN_MEMORY_CACHE",
         clientCount: wss.clients.size,
-        spawnedWorkers: spawnedWorkersList
+        spawnedWorkers: spawnedWorkersList,
+        systemSpecs: SystemMetrics.getSpecs()
       }
     };
     ws.send(JSON.stringify(initialPayload));
@@ -563,6 +616,11 @@ async function startServer() {
       if (controller) {
         controller.abort();
         activeBatches.delete(ws);
+      }
+      const acKey = activeAutocannonRuns.get(ws);
+      if (acKey) {
+        AutocannonEngine.stop(acKey);
+        activeAutocannonRuns.delete(ws);
       }
     });
 
@@ -620,184 +678,168 @@ async function startServer() {
           const controller = new AbortController();
           activeBatches.set(ws, controller);
 
-          const workersArray = Array.from(activeWorkerThreads.values());
-          const usePhysicalThreads = workersArray.length > 0;
+          // Update worker threads telemetry to reflect active batch stress test
+          Array.from(activeWorkerThreads.values()).forEach(w => {
+            w.status = "ACTIVE";
+            w.task = `STRESS_TEST_${(config.testModule || 'LOAD').toUpperCase()}`;
+          });
+          broadcastTelemetry();
 
-          if (usePhysicalThreads) {
-            // Signal workers that they are working
-            workersArray.forEach(w => {
-              w.status = "ACTIVE";
-              w.task = `STRESS_TEST_${(config.testModule || 'LOAD').toUpperCase()}`;
+          // Execute with the full RequestRunner engine ensuring accurate mutations, injections, and percentiles
+          RequestRunner.runBatch(config, (progress) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ 
+                type: "progress", 
+                tabId, 
+                testModule: config.testModule, 
+                uiModule: config.uiModule, 
+                ...progress 
+              }));
+            }
+          }, controller.signal).then(async (results) => {
+            // Reset worker threads status
+            Array.from(activeWorkerThreads.values()).forEach(w => {
+              w.status = "IDLE";
+              w.task = "WAITING_FOR_QUEUE";
             });
             broadcastTelemetry();
 
-            const total = config.requests ? config.requests.length : config.iterations;
-            const results: CurlResult[] = [];
-            let completed = 0;
-            const startTime = Date.now();
+            activeBatches.delete(ws);
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ 
+                type: "complete", 
+                tabId, 
+                testModule: config.testModule, 
+                uiModule: config.uiModule, 
+                results 
+              }));
+            }
 
-            const runIteration = (index: number, workerInfo: RealWorkerInfo): Promise<CurlResult> => {
-              let finalRequest = config.requests ? { ...config.requests[index] } : { ...config.request! };
-              
-              if (config.testModule === 'distributed' || config.rotateIps) {
-                const chosenRegions = config.regions && config.regions.length > 0 ? config.regions : ['us', 'eu', 'apac', 'latam'];
-                const region = chosenRegions[Math.floor(Math.random() * chosenRegions.length)];
-                const info = getRandomRegionIp(region);
-                finalRequest.headers = {
-                  ...finalRequest.headers,
-                  'X-Forwarded-For': info.ip,
-                  'X-Real-IP': info.ip,
-                  'CF-Connecting-IP': info.ip,
-                };
-              }
-
-              return new Promise<CurlResult>((resolve) => {
-                const reqId = `${index}-${Math.random().toString(36).substring(7)}`;
-                
-                const handler = (message: any) => {
-                  if (message.type === 'request_done' && message.payload.requestId === reqId) {
-                    workerInfo.workerRef.off('message', handler);
-                    
-                    const res = message.payload.result;
-                    const rawHeadersStr = Object.entries(res.headers || {})
-                      .map(([k, v]) => `${k}: ${v}`)
-                      .join('\r\n');
-                    const fullRawOutput = `HTTP/1.1 ${res.status}\r\n${rawHeadersStr}\r\n\r\n${res.body || ''}`;
-                    const curlResult: CurlResult = {
-                      id: `req-${index}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-                      status: res.status,
-                      headers: res.headers || {},
-                      body: res.body || "",
-                      rawOutput: fullRawOutput,
-                      curlCommand: `curl -X ${finalRequest.method === 'GRAPHQL' ? 'POST' : finalRequest.method} "${finalRequest.url}"`,
-                      responseTime: res.responseTime,
-                      simulatedIp: finalRequest.headers?.['X-Forwarded-For'],
-                      simulatedRegion: finalRequest.headers?.['X-Forwarded-For'] ? "Geo Spoofed" : undefined,
-                      simulatedFlag: finalRequest.headers?.['X-Forwarded-For'] ? "🌐" : undefined,
-                      simulatedCountry: finalRequest.headers?.['X-Forwarded-For'] ? "Spoofed Region" : undefined,
-                      error: res.error,
-                      config: finalRequest
-                    };
-                    
-                    resolve(curlResult);
-                  }
-                };
-                
-                workerInfo.workerRef.on('message', handler);
-                workerInfo.workerRef.postMessage({
-                  type: 'RUN_HTTP_REQUEST',
-                  requestId: reqId,
-                  payload: {
-                    url: finalRequest.url,
-                    method: finalRequest.method,
-                    headers: finalRequest.headers,
-                    body: finalRequest.body
-                  }
-                });
+            if (results.length > 0) {
+              await Store.addToHistory({ 
+                request: config.request, 
+                batch: { 
+                  iterations: config.iterations, 
+                  concurrency: config.concurrency,
+                  successCount: results.filter(r => r.status >= 200 && r.status < 300).length,
+                  avgResponseTime: results.reduce((acc, r) => acc + r.responseTime, 0) / results.length
+                } 
               });
-            };
-
-            const queue = Array.from({ length: total }, (_, i) => i);
-            const activeRequestsInProgress = new Set<Promise<any>>();
-            
-            const workerThreadRunner = async () => {
-              while (queue.length > 0 && !controller.signal.aborted) {
-                const availableWorkers = Array.from(activeWorkerThreads.values());
-                if (availableWorkers.length === 0) break;
-                
-                const index = queue.shift();
-                if (index === undefined) break;
-
-                const selectedWorker = availableWorkers[index % availableWorkers.length];
-                
-                const promise = runIteration(index, selectedWorker).then((res) => {
-                  results.push(res);
-                  completed++;
-                  
-                  if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ 
-                      type: "progress", 
-                      tabId, 
-                      testModule: config.testModule,
-                      uiModule: config.uiModule,
-                      completed, 
-                      total, 
-                      lastResult: res, 
-                      startTime 
-                    }));
-                  }
-                  activeRequestsInProgress.delete(promise);
-                });
-
-                activeRequestsInProgress.add(promise);
-                if (activeRequestsInProgress.size >= Math.min(config.concurrency, availableWorkers.length * 4)) {
-                  await Promise.race(activeRequestsInProgress);
-                }
-
-                if (config.delayMs && config.delayMs > 0) {
-                  await new Promise(resolve => setTimeout(resolve, config.delayMs));
-                }
-              }
-            };
-
-            workerThreadRunner().then(async () => {
-              while (activeRequestsInProgress.size > 0) {
-                await Promise.all(activeRequestsInProgress);
-              }
-
-              // Reset workers task status
-              Array.from(activeWorkerThreads.values()).forEach(w => {
-                w.status = "IDLE";
-                w.task = "WAITING_FOR_QUEUE";
-              });
-              broadcastTelemetry();
-
-              activeBatches.delete(ws);
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: "complete", tabId, testModule: config.testModule, uiModule: config.uiModule, results }));
-              }
-
-              if (results.length > 0) {
-                await Store.addToHistory({ 
-                  request: config.request, 
-                  batch: { 
-                    iterations: config.iterations, 
-                    concurrency: config.concurrency,
-                    successCount: results.filter(r => r.status >= 200 && r.status < 300).length,
-                    avgResponseTime: results.reduce((acc, r) => acc + r.responseTime, 0) / results.length
-                  } 
-                });
-              }
+            }
+          }).catch(err => {
+            console.error("Batch runner execution error:", err);
+            Array.from(activeWorkerThreads.values()).forEach(w => {
+              w.status = "IDLE";
+              w.task = "WAITING_FOR_QUEUE";
             });
-          } else {
-            // Fallback to async event loop execution
-            RequestRunner.runBatch(config, (progress) => {
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: "progress", tabId, testModule: config.testModule, uiModule: config.uiModule, ...progress }));
-              }
-            }, controller.signal).then(async (results) => {
-              activeBatches.delete(ws);
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: "complete", tabId, testModule: config.testModule, uiModule: config.uiModule, results }));
-              }
-              if (results.length > 0) {
-                await Store.addToHistory({ 
-                  request: config.request, 
-                  batch: { 
-                    iterations: config.iterations, 
-                    concurrency: config.concurrency,
-                    successCount: results.filter(r => r.status >= 200 && r.status < 300).length,
-                    avgResponseTime: results.reduce((acc, r) => acc + r.responseTime, 0) / results.length
-                  } 
-                });
-              }
-            });
-          }
+            broadcastTelemetry();
+            activeBatches.delete(ws);
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: "error",
+                tabId,
+                testModule: config.testModule,
+                uiModule: config.uiModule,
+                error: err?.message || "Batch runner execution failed."
+              }));
+            }
+          });
         } else if (data.type === "abort-batch") {
           const controller = activeBatches.get(ws);
           if (controller) {
             controller.abort();
             activeBatches.delete(ws);
+          }
+        } else if (data.type === "run-autocannon") {
+          const config: AutocannonConfig = data.payload;
+          const tabId = data.tabId;
+          const runKey = `ws-ac-${tabId}-${Date.now()}`;
+          activeAutocannonRuns.set(ws, runKey);
+
+          // Update worker threads telemetry task description
+          Array.from(activeWorkerThreads.values()).forEach(w => {
+            w.status = "ACTIVE";
+            w.task = `AUTOCANNON_${config.connections}CONN_${config.duration}S`;
+          });
+          broadcastTelemetry();
+
+          try {
+            const result = await AutocannonEngine.run(runKey, config, (progress) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                  type: "autocannon-progress",
+                  tabId,
+                  progress
+                }));
+              }
+            });
+
+            activeAutocannonRuns.delete(ws);
+
+            // Reset workers
+            Array.from(activeWorkerThreads.values()).forEach(w => {
+              w.status = "IDLE";
+              w.task = "WAITING_FOR_QUEUE";
+            });
+            broadcastTelemetry();
+
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: "autocannon-complete",
+                tabId,
+                result
+              }));
+            }
+
+            // Save benchmark in history store
+            await Store.addToHistory({
+              request: {
+                url: config.url,
+                method: config.method || 'GET',
+                headers: config.headers || {},
+                body: config.body
+              },
+              batch: {
+                iterations: result.totalRequests,
+                concurrency: config.connections,
+                successCount: result.statusCodes['2xx'],
+                avgResponseTime: result.latency.average
+              }
+            });
+          } catch (err: any) {
+            activeAutocannonRuns.delete(ws);
+            Array.from(activeWorkerThreads.values()).forEach(w => {
+              w.status = "IDLE";
+              w.task = "WAITING_FOR_QUEUE";
+            });
+            broadcastTelemetry();
+
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: "autocannon-error",
+                tabId,
+                error: err?.message || "Autocannon benchmark failed to run"
+              }));
+            }
+          }
+        } else if (data.type === "abort-autocannon") {
+          const tabId = data.tabId;
+          const acKey = activeAutocannonRuns.get(ws);
+          if (acKey) {
+            AutocannonEngine.stop(acKey);
+            activeAutocannonRuns.delete(ws);
+          }
+          Array.from(activeWorkerThreads.values()).forEach(w => {
+            w.status = "IDLE";
+            w.task = "WAITING_FOR_QUEUE";
+          });
+          broadcastTelemetry();
+
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: "autocannon-aborted",
+              tabId
+            }));
           }
         }
       } catch (error) {

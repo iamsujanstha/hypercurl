@@ -6,6 +6,7 @@ export { ApiClientWorkspace } from './components/ApiClientWorkspace';
 export { WorkerPoolPopover } from './components/WorkerPoolPopover';
 export { TerminalDialog } from './components/TerminalDialog';
 export { HistoryList } from './components/HistoryList';
+export { AutocannonStudio } from './components/AutocannonStudio';
 
 // Types
 export * from './types';
