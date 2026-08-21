@@ -102,12 +102,13 @@ const PRESETS: BenchmarkPreset[] = [
 
 export function AutocannonStudio({
   activeTab,
-  variables,
+  variables = {},
   onStartAutocannon,
   onAbortAutocannon,
   isExecuting,
   autocannonProgress,
   autocannonResult,
+  onClearResults,
 }: AutocannonStudioProps) {
   // Test configuration state
   const [url, setUrl] = useState<string>(activeTab?.config.url || 'http://localhost:3000/api/health');
@@ -774,6 +775,16 @@ export function AutocannonStudio({
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {onClearResults && (
+                      <button
+                        type="button"
+                        onClick={onClearResults}
+                        className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold bg-[#141C2B] hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-slate-750 hover:border-rose-800/50 flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                        title="Clear benchmark results"
+                      >
+                        <Trash2 size={13} /> CLEAR
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={handleDownloadJson}

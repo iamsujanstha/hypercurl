@@ -127,20 +127,10 @@ export interface Tab {
 }
 
 export interface Telemetry {
-  redisStatus: string;
-  redisLatency: number;
-  activeWorkers: number;
-  maxWorkers: number;
-  latency: string;
-  redisType: string;
+  status: 'ONLINE' | 'STANDBY';
+  engine: string;
   clientCount: number;
-  spawnedWorkers: {
-    id: string;
-    name: string;
-    status: 'IDLE' | 'ACTIVE';
-    task: string;
-    activeTime: number;
-  }[];
+  latency: string;
   systemSpecs?: SystemHardwareSpecs;
 }
 
@@ -154,4 +144,57 @@ export interface DialogState {
   selectedColId?: string;
   onConfirm: (val1?: string, val2?: string) => void;
 }
+
+// Real-World Automated Test Suite Types
+export interface TestSuiteStep {
+  id: string;
+  name: string;
+  method: HttpMethod;
+  url: string;
+  headersList: { id: string; key: string; value: string; enabled?: boolean }[];
+  bodyType?: 'none' | 'json' | 'raw';
+  body?: string;
+  assertions: AssertionRule[];
+  extractors: ResponseExtractorRule[];
+  timeoutMs?: number;
+  delayBeforeMs?: number;
+}
+
+export interface TestSuite {
+  id: string;
+  name: string;
+  description: string;
+  category: 'smoke' | 'auth' | 'crud' | 'regression' | 'sla' | 'custom';
+  steps: TestSuiteStep[];
+  stopOnFailure?: boolean;
+}
+
+export interface TestStepResult {
+  stepId: string;
+  stepName: string;
+  method: string;
+  url: string;
+  resolvedHeaders: Record<string, string>;
+  resolvedBody?: string;
+  response?: CurlResult;
+  status: 'passed' | 'failed' | 'running' | 'pending' | 'skipped' | 'error';
+  durationMs: number;
+  assertions: AssertionResult[];
+  extractedVariables?: Record<string, string>;
+  error?: string;
+}
+
+export interface TestSuiteRunResult {
+  suiteId: string;
+  suiteName: string;
+  startTime: number;
+  endTime?: number;
+  totalDurationMs: number;
+  totalSteps: number;
+  passedSteps: number;
+  failedSteps: number;
+  stepResults: TestStepResult[];
+  status: 'idle' | 'running' | 'completed' | 'aborted' | 'failed';
+}
+
 

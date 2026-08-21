@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Terminal, Plus, ChevronLeft, Layers, Sliders, History, Menu, Zap, ShieldAlert, Cpu, Sparkles } from 'lucide-react';
+import { Terminal, Plus, ChevronLeft, Layers, Sliders, History, Menu, Zap, Gauge, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AppView } from '../types';
 
@@ -46,17 +46,26 @@ export function WorkspaceSidebar({
     { 
       key: 'studio', 
       label: 'API STUDIO', 
-      badge: 'CLIENT',
-      sublabel: 'Single Request & Inspection',
+      badge: 'CURL',
+      sublabel: 'Single Request & DevTools Tabs',
       icon: Terminal,
       accentColor: 'text-emerald-400',
       badgeBg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
     },
     { 
+      key: 'autocannon', 
+      label: 'AUTOCANNON', 
+      badge: 'BENCHMARK',
+      sublabel: 'High-Concurrency Socket Load',
+      icon: Gauge,
+      accentColor: 'text-amber-400',
+      badgeBg: 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+    },
+    { 
       key: 'suites', 
       label: 'TEST SUITES', 
-      badge: '9 LABS',
-      sublabel: 'Stress, Chaos, OWASP & Race',
+      badge: 'RUNNER',
+      sublabel: 'Automated Workflows, SLAs & Assertions',
       icon: Layers,
       accentColor: 'text-cyan-400',
       badgeBg: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
@@ -67,8 +76,8 @@ export function WorkspaceSidebar({
       badge: 'VARS',
       sublabel: 'Global {{KEYS}} & Secrets',
       icon: Sliders,
-      accentColor: 'text-amber-400',
-      badgeBg: 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+      accentColor: 'text-blue-400',
+      badgeBg: 'bg-blue-500/10 text-blue-400 border-blue-500/30'
     },
     { 
       key: 'history', 
@@ -125,7 +134,7 @@ export function WorkspaceSidebar({
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = view === item.key || 
-            (item.key === 'studio' && (view === 'debugger' || view === 'autocannon')) ||
+            (item.key === 'studio' && view === 'debugger') ||
             (item.key === 'suites' && view === 'lab');
           return (
             <button 
@@ -187,13 +196,13 @@ export function WorkspaceSidebar({
             <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-850/80 text-[10px] space-y-1.5">
               <div className="flex items-center gap-1.5 font-mono font-bold text-slate-300 text-[10px]">
                 <Sparkles size={12} className="text-emerald-400" />
-                <span>QUICK GUIDE</span>
+                <span>ENGINES</span>
               </div>
               <p className="text-slate-400 text-[9.5px] leading-relaxed">
-                • <strong className="text-emerald-400">API Studio:</strong> Send 1 request, test headers, inspect Chrome DevTools tabs (Response, Payload, Preview).
+                • <strong className="text-emerald-400">cURL Engine:</strong> Native single-request inspection with complete headers, payload and response tabs.
               </p>
               <p className="text-slate-400 text-[9.5px] leading-relaxed">
-                • <strong className="text-cyan-400">Test Suites:</strong> Run 9 automated labs including Concurrency, Race conditions, Chaos, and OWASP audits.
+                • <strong className="text-amber-400">Autocannon Engine:</strong> High-throughput HTTP socket load testing with latency percentiles and RPS charts.
               </p>
             </div>
           </div>

@@ -1,7 +1,6 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { cn } from '@/lib/utils';
-import { TestLab } from '@/components/TestLab';
 import { VariablesManager } from '@/components/VariablesManager';
 
 // Import refactored domain components & hooks
@@ -11,10 +10,10 @@ import {
   WorkspaceNavbar,
   TabSystem,
   ApiClientWorkspace,
-  WorkerPoolPopover,
   TerminalDialog,
   HistoryList,
-  AutocannonStudio
+  AutocannonStudio,
+  TestSuiteRunner
 } from '@/features/api-tester';
 
 export function ApiTester({ variables: initialVariables = {} }: { variables?: Record<string, string> }) {
@@ -24,7 +23,6 @@ export function ApiTester({ variables: initialVariables = {} }: { variables?: Re
       activeTabId,
       collections,
       isSidebarCollapsed,
-      isWorkerPoolOpen,
       theme,
       dialog,
       view,
@@ -38,7 +36,6 @@ export function ApiTester({ variables: initialVariables = {} }: { variables?: Re
     actions: {
       setActiveTabId,
       setIsSidebarCollapsed,
-      setIsWorkerPoolOpen,
       setTheme,
       setDialog,
       showCustomAlert,
@@ -96,18 +93,8 @@ export function ApiTester({ variables: initialVariables = {} }: { variables?: Re
           theme={theme}
           setTheme={setTheme}
           telemetry={telemetry}
-          isWorkerPoolOpen={isWorkerPoolOpen}
-          setIsWorkerPoolOpen={setIsWorkerPoolOpen}
           isSidebarCollapsed={isSidebarCollapsed}
           setIsSidebarCollapsed={setIsSidebarCollapsed}
-        />
-
-        {/* Worker Pool Floating Popover Dashboard */}
-        <WorkerPoolPopover 
-          isOpen={isWorkerPoolOpen}
-          onClose={() => setIsWorkerPoolOpen(false)}
-          telemetry={telemetry}
-          ws={ws}
         />
 
         {/* Tab Selection Header Bar */}
@@ -124,7 +111,7 @@ export function ApiTester({ variables: initialVariables = {} }: { variables?: Re
         {/* Dynamic Workspace Switcher Panels */}
         <div className="flex-1 overflow-hidden relative">
           <AnimatePresence mode="wait">
-            {(view === 'studio' || view === 'debugger' || view === 'autocannon') && (
+            {(view === 'studio' || view === 'debugger') && (
               <ApiClientWorkspace 
                 activeTab={activeTab}
                 activeTabId={activeTabId}
@@ -161,6 +148,32 @@ export function ApiTester({ variables: initialVariables = {} }: { variables?: Re
               />
             )}
 
+            {view === 'autocannon' && (
+              <motion.div 
+                key="autocannon"
+                initial={{ opacity: 0, scale: 0.99 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.99 }}
+                transition={{ duration: 0.15 }}
+                className="absolute inset-0 overflow-hidden flex flex-col"
+              >
+                <AutocannonStudio 
+                  activeTab={activeTab}
+                  tabs={tabs}
+                  variables={variables}
+                  onStartAutocannon={handleStartAutocannon}
+                  onAbortAutocannon={handleAbortAutocannon}
+                  isExecuting={Boolean(activeTab.loading && (activeTab.autocannonProgress || !activeTab.autocannonResult))}
+                  autocannonProgress={activeTab.autocannonProgress || null}
+                  autocannonResult={activeTab.autocannonResult || null}
+                  onClearResults={() => {
+                    updateActiveTab({ autocannonResult: null, autocannonProgress: null, loading: false });
+                  }}
+                  telemetry={telemetry}
+                />
+              </motion.div>
+            )}
+
             {(view === 'suites' || view === 'lab') && (
               <motion.div 
                 key="suites"
@@ -168,44 +181,12 @@ export function ApiTester({ variables: initialVariables = {} }: { variables?: Re
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.99 }}
                 transition={{ duration: 0.15 }}
-                className="absolute inset-0 overflow-hidden"
+                className="absolute inset-0 overflow-hidden flex flex-col"
               >
-                <TestLab 
-                  config={activeTab.config}
-                  headersList={activeTab.headersList}
-                  ws={ws}
-                  activeTabId={activeTabId}
-                  loading={activeTab.loading}
-                  progress={activeTab.progress}
-                  results={activeTab.batchResults}
-                  labResults={activeTab.labResults || {}}
-                  autocannonProgress={activeTab.autocannonProgress || null}
-                  autocannonResult={activeTab.autocannonResult || null}
-                  onStart={handleStartLabTest}
-                  onAbort={handleAbort}
-                  onStartAutocannon={handleStartAutocannon}
-                  onAbortAutocannon={handleAbortAutocannon}
-                  onClearAutocannon={() => {
-                    updateActiveTab({ autocannonResult: null, autocannonProgress: null, loading: false });
-                  }}
-                  onChangeConfig={updateActiveConfig}
-                  onClearLogs={(modId?: string) => {
-                    if (modId) {
-                      const nextLabResults = { ...(activeTab.labResults || {}) };
-                      delete nextLabResults[modId];
-                      updateActiveTab({ 
-                        batchResults: [], 
-                        progress: null, 
-                        labResults: nextLabResults 
-                      });
-                    } else {
-                      updateActiveTab({ 
-                        batchResults: [], 
-                        progress: null, 
-                        labResults: {} 
-                      });
-                    }
-                  }}
+                <TestSuiteRunner
+                  tabs={tabs}
+                  variables={variables}
+                  setVariables={setVariables}
                   telemetry={telemetry}
                 />
               </motion.div>
@@ -251,20 +232,18 @@ export function ApiTester({ variables: initialVariables = {} }: { variables?: Re
           </AnimatePresence>
         </div>
 
-        {/* Static Nominal Status Footer Bar */}
+        {/* Native Engine Status Footer Bar */}
         <footer className="h-8 border-t border-slate-850 bg-[#0F1115] flex items-center justify-between px-4 text-[10px] font-mono text-slate-500 shrink-0 select-none">
-          <div className="flex gap-4">
-            <span className="flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> SYSTEM: NOMINAL
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> HYPERCURL ENGINE: READY
             </span>
-            <span>LATENCY: {telemetry.latency}</span>
-            <span>THREADS: {telemetry.activeWorkers}/{telemetry.maxWorkers}</span>
-            <span className="opacity-50">|</span>
+            <span className="text-slate-400">ENGINES: cURL (libcurl/native) + Autocannon</span>
+            <span className="opacity-40">|</span>
             <span>CLIENTS: {telemetry.clientCount}</span>
           </div>
           <div className="flex gap-4">
-            <span>v0.4.2-alpha</span>
-            <span className="text-slate-350 hover:text-emerald-400 underline cursor-pointer">VIEW_RAW_LOGS</span>
+            <span className="text-slate-400 font-bold">PRODUCTION v1.0.0</span>
           </div>
         </footer>
       </main>

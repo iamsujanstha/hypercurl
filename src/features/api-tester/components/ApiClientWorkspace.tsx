@@ -32,7 +32,7 @@ import { cn } from '@/lib/utils';
 import { Tab, AssertionRule, TestExecutionMode } from '@/features/api-tester/types';
 import { HeaderRow } from './HeaderRow';
 import { BatchViewer } from './BatchViewer';
-import { NetworkLogViewer } from './NetworkLogViewer';
+import { ResponseViewer } from './ResponseViewer';
 import { AutocannonBenchmarkView } from './AutocannonBenchmarkView';
 
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS', 'GRAPHQL'];
@@ -1028,13 +1028,12 @@ export function ApiClientWorkspace({
             theme={theme}
           />
         ) : (
-          <NetworkLogViewer
-            results={Array.isArray(activeTab.results) && activeTab.results.length > 0 ? activeTab.results : (activeTab.result ? [activeTab.result] : [])}
+          <ResponseViewer
+            result={activeTab.result || (Array.isArray(activeTab.results) && activeTab.results.length > 0 ? activeTab.results[activeTab.results.length - 1] : null)}
             loading={Boolean(activeTab.loading)}
             onAbort={handleAbort}
             theme={theme}
-            activeTabId={activeTabId || activeTab?.id || ''}
-            onClearLogs={() => updateActiveTab({ results: [], result: null })}
+            onClear={() => updateActiveTab({ result: null, results: [] })}
           />
         )}
       </div>

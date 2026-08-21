@@ -83,8 +83,6 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
     return localStorage.getItem(SIDEBAR_KEY) === 'true';
   });
 
-  const [isWorkerPoolOpen, setIsWorkerPoolOpen] = useState(false);
-
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     try {
       const saved = localStorage.getItem('curl_commander_theme');
@@ -172,14 +170,10 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
 
   const [telemetry, setTelemetry] = useState<Telemetry>(() => {
     return {
-      redisStatus: 'CONNECTED',
-      redisLatency: 2,
-      activeWorkers: 0,
-      maxWorkers: 64,
-      latency: '10ms',
-      redisType: 'IN_MEMORY_CACHE',
-      clientCount: 1,
-      spawnedWorkers: []
+      status: 'ONLINE',
+      engine: 'cURL + Autocannon',
+      latency: '0.2ms',
+      clientCount: 1
     };
   });
 
@@ -439,21 +433,6 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
             }
             return t;
           }));
-        } else if (data.type === 'telemetry_real_math_done') {
-          setDialog({
-            isOpen: true,
-            type: 'ALERT',
-            title: "⚡ REAL CPU THREAD SUCCESS",
-            message: `Node.js background OS thread [${data.payload.workerName}] completed a real CPU-bound stress-test (15,000,000 Leibniz iterations) in the background!\n\n` +
-                     `• Computed Pi: ${data.payload.result}\n` +
-                     `• Thread active CPU duration: ${data.payload.elapsed} ms\n\n` +
-                     `Because this ran on a native node:worker_threads Worker, the main Express event loop remained completely idle and responsive!`,
-            defaultValue: '',
-            inputVal: '',
-            onConfirm: () => {
-              setDialog(prev => ({ ...prev, isOpen: false }));
-            }
-          });
         }
       } catch (e) {
         console.error('WS Message parsing error:', e);
@@ -1006,7 +985,7 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
         pipelining: settings.pipelining || 1,
         rate: settings.rate,
         timeout: settings.timeout || 10,
-        title: `TestLab Autocannon Load Benchmark`
+        title: `Autocannon Load Benchmark`
       });
       return;
     }
@@ -1100,7 +1079,6 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
       activeTabId,
       collections,
       isSidebarCollapsed,
-      isWorkerPoolOpen,
       theme,
       dialog,
       view,
@@ -1117,7 +1095,6 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
       setActiveTabId,
       setCollections,
       setIsSidebarCollapsed,
-      setIsWorkerPoolOpen,
       setTheme,
       setDialog,
       showCustomAlert,

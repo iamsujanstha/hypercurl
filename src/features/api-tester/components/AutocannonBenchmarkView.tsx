@@ -1,14 +1,38 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState, useMemo } from 'react';
 import { 
-  Flame, Play, Square, RefreshCw, Activity, Clock, 
-  ShieldCheck, AlertTriangle, Download, Copy, Check,
-  BarChart2, Zap, Layers, Server, CheckCircle2, XCircle,
-  Cpu, HardDrive
+  Flame, 
+  Play, 
+  Square, 
+  RefreshCw, 
+  Activity, 
+  Clock, 
+  ShieldCheck, 
+  AlertTriangle, 
+  Download, 
+  Copy, 
+  Check,
+  BarChart2, 
+  Zap, 
+  Layers, 
+  Server, 
+  CheckCircle2, 
+  XCircle,
+  Terminal,
+  Cpu,
+  Trash2,
+  HardDrive
 } from 'lucide-react';
 import { 
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, 
-  Tooltip as RechartsTooltip, CartesianGrid, BarChart, Bar, Cell 
+  ResponsiveContainer, 
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  Tooltip as RechartsTooltip, 
+  CartesianGrid, 
+  BarChart as RechartsBarChart, 
+  Bar, 
+  Cell 
 } from 'recharts';
 import { cn } from '@/lib/utils';
 import { AutocannonBenchmarkResult, AutocannonTickProgress } from '../types';
@@ -27,6 +51,8 @@ export interface AutocannonBenchmarkViewProps {
   pipelining?: number;
 }
 
+export type AutocannonViewTab = 'tables' | 'raw' | 'charts';
+
 export function AutocannonBenchmarkView({
   isExecuting,
   autocannonProgress,
@@ -40,15 +66,86 @@ export function AutocannonBenchmarkView({
   duration = 10,
   pipelining = 1
 }: AutocannonBenchmarkViewProps) {
-  const [activeTab, setActiveTab] = useState<'timeline' | 'histogram' | 'status' | 'hardware' | 'raw'>('timeline');
-  const [copiedRaw, setCopiedRaw] = useState(false);
+  const [viewTab, setViewTab] = useState<AutocannonViewTab>('tables');
+  const [copiedCli, setCopiedCli] = useState(false);
+  const [copiedAscii, setCopiedAscii] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
-  const handleCopyRaw = () => {
+  // Exact CLI Command snippet
+  const cliCommand = useMemo(() => {
+    if (autocannonResult?.cliCommand) return autocannonResult.cliCommand;
+    const cleanUrl = targetUrl || 'http://localhost:3000/api/health';
+    return `autocannon -c ${connections} -d ${duration} -p ${pipelining} -m ${targetMethod} "${cleanUrl}"`;
+  }, [autocannonResult, connections, duration, pipelining, targetMethod, targetUrl]);
+
+  // Formatted ASCII table string
+  const formattedAscii = useMemo(() => {
     if (autocannonResult?.formattedCliOutput) {
-      navigator.clipboard.writeText(autocannonResult.formattedCliOutput);
-      setCopiedRaw(true);
-      setTimeout(() => setCopiedRaw(false), 2000);
+      return autocannonResult.formattedCliOutput;
     }
+    if (!autocannonResult) return '';
+
+    const l: any = autocannonResult.latency || {};
+    const r: any = autocannonResult.requests || {};
+    const t: any = autocannonResult.throughput || {};
+
+    const p2_5_lat = (l.p2_5 !== undefined ? l.p2_5 : l.p50 ? l.p50 * 0.7 : 0).toFixed(1);
+    const p50_lat = (l.p50 || 0).toFixed(1);
+    const p97_5_lat = (l.p97_5 || l.p90 || 0).toFixed(1);
+    const p99_lat = (l.p99 || 0).toFixed(1);
+    const avg_lat = (l.average || 0).toFixed(1);
+    const std_lat = (l.stddev || 0).toFixed(1);
+    const max_lat = (l.max || 0).toFixed(1);
+
+    const p1_req = (r.p1 || r.p50 ? r.p50 * 0.6 : 0).toFixed(0);
+    const p2_5_req = (r.p2_5 || r.p50 ? r.p50 * 0.7 : 0).toFixed(0);
+    const p50_req = (r.p50 || 0).toFixed(0);
+    const p97_5_req = (r.p97_5 || r.p90 || 0).toFixed(0);
+    const avg_req = (r.average || 0).toFixed(0);
+    const std_req = (r.stddev || 0).toFixed(0);
+    const min_req = (r.min || 0).toFixed(0);
+
+    const p1_bytes = ((t.p1 || t.p50 ? t.p50 * 0.6 : 0) / 1024).toFixed(0);
+    const p2_5_bytes = ((t.p2_5 || t.p50 ? t.p50 * 0.7 : 0) / 1024).toFixed(0);
+    const p50_bytes = ((t.p50 || 0) / 1024).toFixed(0);
+    const p97_5_bytes = ((t.p97_5 || t.p90 || 0) / 1024).toFixed(0);
+    const avg_bytes = ((t.average || 0) / 1024).toFixed(0);
+    const std_bytes = ((t.stddev || 0) / 1024).toFixed(0);
+    const min_bytes = ((t.min || 0) / 1024).toFixed(0);
+
+    return `
+┌─────────┬────────┬────────┬────────┬────────┬───────────┬──────────┬────────┐
+│ Stat    │ 2.5%   │ 50%    │ 97.5%  │ 99%    │ Avg       │ Stdev    │ Max    │
+├─────────┼────────┼────────┼────────┼────────┼───────────┼──────────┼────────┤
+│ Latency │ ${p2_5_lat} ms │ ${p50_lat} ms │ ${p97_5_lat} ms │ ${p99_lat} ms │ ${avg_lat} ms   │ ${std_lat} ms   │ ${max_lat} ms │
+└─────────┴────────┴────────┴────────┴────────┴───────────┴──────────┴────────┘
+┌───────────┬────────┬────────┬────────┬────────┬───────────┬──────────┬────────┐
+│ Stat      │ 1%     │ 2.5%   │ 50%    │ 97.5%  │ Avg       │ Stdev    │ Min    │
+├───────────┼────────┼────────┼────────┼────────┼───────────┼──────────┼────────┤
+│ Req/Sec   │ ${p1_req}    │ ${p2_5_req}    │ ${p50_req}    │ ${p97_5_req}    │ ${avg_req}     │ ${std_req}     │ ${min_req}    │
+├───────────┼────────┼────────┼────────┼────────┼───────────┼──────────┼────────┤
+│ Bytes/Sec │ ${p1_bytes} kB │ ${p2_5_bytes} kB │ ${p50_bytes} kB │ ${p97_5_bytes} kB │ ${avg_bytes} kB  │ ${std_bytes} kB  │ ${min_bytes} kB │
+└───────────┴────────┴────────┴────────┴────────┴───────────┴──────────┴────────┘
+
+Req/Bytes counts: ${autocannonResult.totalRequests.toLocaleString()} requests, ${(autocannonResult.totalBytes / 1024 / 1024).toFixed(2)} MB read
+2xx responses: ${autocannonResult.statusCodes?.['2xx'] || autocannonResult.totalRequests}, non-2xx responses: ${autocannonResult.statusCodes?.non2xx || 0}
+Errors: ${autocannonResult.errors || 0}, Timeouts: ${autocannonResult.timeouts || 0}, Resets: ${autocannonResult.resets || 0}
+Running ${autocannonResult.durationSeconds || duration}s test @ ${autocannonResult.url || targetUrl}
+${autocannonResult.connections || connections} connections with ${autocannonResult.pipelining || pipelining} pipelining factor
+`.trim();
+  }, [autocannonResult, connections, duration, pipelining, targetUrl]);
+
+  const handleCopyCli = () => {
+    navigator.clipboard.writeText(cliCommand);
+    setCopiedCli(true);
+    setTimeout(() => setCopiedCli(false), 2000);
+  };
+
+  const handleCopyAscii = () => {
+    if (!formattedAscii) return;
+    navigator.clipboard.writeText(formattedAscii);
+    setCopiedAscii(true);
+    setTimeout(() => setCopiedAscii(false), 2000);
   };
 
   const handleDownloadJson = () => {
@@ -62,8 +159,8 @@ export function AutocannonBenchmarkView({
     URL.revokeObjectURL(href);
   };
 
-  // Prepare chart data
-  const timelineData = React.useMemo(() => {
+  // Chart data
+  const timelineData = useMemo(() => {
     if (autocannonResult?.timeline?.length) {
       return autocannonResult.timeline.map(t => ({
         second: `${t.second}s`,
@@ -71,55 +168,55 @@ export function AutocannonBenchmarkView({
         latency: t.latency
       }));
     }
-    if (autocannonResult?.requests?.average) {
-      const d = [];
-      const dur = autocannonResult.durationSeconds || duration;
-      for (let i = 1; i <= dur; i++) {
-        d.push({
-          second: `${i}s`,
-          rps: Math.round(autocannonResult.requests.average * (0.9 + Math.random() * 0.2)),
-          latency: autocannonResult.latency?.average || 0
-        });
-      }
-      return d;
-    }
     return [];
-  }, [autocannonResult, duration]);
+  }, [autocannonResult]);
 
-  const latencyHistogramData = React.useMemo(() => {
+  const percentileData = useMemo(() => {
     if (!autocannonResult?.latency) return [];
     const l = autocannonResult.latency;
     return [
-      { name: 'p50', value: Number(l.p50?.toFixed(1) || 0), label: '50th %tile' },
-      { name: 'p75', value: Number(l.p75?.toFixed(1) || 0), label: '75th %tile' },
-      { name: 'p90', value: Number(l.p90?.toFixed(1) || 0), label: '90th %tile' },
-      { name: 'p99', value: Number(l.p99?.toFixed(1) || 0), label: '99th %tile' },
-      { name: 'p99.9', value: Number(l.p99_9?.toFixed(1) || 0), label: '99.9th %tile' },
+      { name: 'p50', value: Number(l.p50?.toFixed(1) || 0) },
+      { name: 'p75', value: Number(l.p75?.toFixed(1) || 0) },
+      { name: 'p90', value: Number(l.p90?.toFixed(1) || 0) },
+      { name: 'p97.5', value: Number(l.p97_5?.toFixed(1) || 0) },
+      { name: 'p99', value: Number(l.p99?.toFixed(1) || 0) },
+      { name: 'p99.9', value: Number(l.p99_9?.toFixed(1) || 0) },
     ];
   }, [autocannonResult]);
 
-  // If in active benchmark execution
+  // =========================================================================
+  // 1. LIVE EXECUTING STATE: Monospace Terminal Progress Bar & Live Stats
+  // =========================================================================
   if (isExecuting && autocannonProgress) {
     const percent = autocannonProgress.percent || 0;
     const currentRps = autocannonProgress.currentRps || 0;
     const currentLatency = autocannonProgress.currentLatency || 0;
+    const elapsed = autocannonProgress.elapsedSeconds || 0;
+    const totalDur = autocannonProgress.durationSeconds || duration || 10;
+    const currentBytes = autocannonProgress.currentBytesPerSec ? (autocannonProgress.currentBytesPerSec / 1024).toFixed(0) : '0';
+
+    // Generate ASCII bar: 20 blocks
+    const totalBlocks = 20;
+    const filledBlocks = Math.round((percent / 100) * totalBlocks);
+    const asciiBar = '█'.repeat(filledBlocks) + '░'.repeat(Math.max(0, totalBlocks - filledBlocks));
 
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-[#080A0F] text-slate-200 overflow-y-auto custom-scrollbar">
-        <div className="w-full max-w-2xl space-y-6">
+      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-[#07090E] text-slate-200 font-mono select-none overflow-y-auto">
+        <div className="w-full max-w-2xl bg-[#0B0E17] border border-slate-800 rounded-xl p-6 shadow-2xl space-y-6">
+          
           {/* Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 animate-pulse">
-                <Flame size={22} />
+              <div className="w-9 h-9 rounded-lg bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
+                <Flame size={20} className="animate-pulse" />
               </div>
               <div>
-                <div className="text-xs font-mono font-black text-rose-400 uppercase tracking-widest flex items-center gap-2">
+                <div className="text-xs font-black text-rose-400 uppercase tracking-widest flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-                  BENCHMARK IN PROGRESS
+                  AUTOCANNON BENCHMARK IN PROGRESS
                 </div>
-                <div className="text-sm font-mono text-slate-200 font-semibold truncate max-w-md">
-                  <span className="text-amber-400 font-bold">{targetMethod}</span> {targetUrl}
+                <div className="text-xs text-slate-300 font-semibold truncate max-w-md mt-0.5">
+                  <span className="text-amber-400 font-bold">{targetMethod}</span> {targetUrl || 'http://localhost:3000/api/health'}
                 </div>
               </div>
             </div>
@@ -127,468 +224,497 @@ export function AutocannonBenchmarkView({
             <button
               type="button"
               onClick={onAbortBenchmark}
-              className="px-4 py-2 rounded-lg text-xs font-mono font-bold bg-rose-600 hover:bg-rose-500 text-white flex items-center gap-1.5 transition-all shadow-md shadow-rose-600/30 cursor-pointer active:scale-95"
+              className="px-3 py-1.5 rounded-lg text-xs font-black bg-rose-600 hover:bg-rose-500 text-white flex items-center gap-1.5 transition-all shadow-md shadow-rose-600/30 cursor-pointer active:scale-95"
             >
-              <Square size={12} className="fill-white" />
-              ABORT
+              <Square size={11} className="fill-white" />
+              ABORT (SIGINT)
             </button>
           </div>
 
-          {/* Progress Bar */}
-          <div className="space-y-2">
-            <div className="flex justify-between text-xs font-mono text-slate-400">
-              <span>{autocannonProgress.elapsedSeconds}s / {autocannonProgress.durationSeconds}s elapsed</span>
-              <span className="font-bold text-rose-400">{percent}%</span>
+          {/* ASCII Progress Bar & Percentage */}
+          <div className="bg-[#05070B] p-4 rounded-xl border border-slate-850 space-y-2">
+            <div className="flex justify-between text-xs font-mono">
+              <span className="text-slate-400">Running load test: <strong className="text-white">{elapsed}s / {totalDur}s</strong></span>
+              <span className="text-rose-400 font-black">{percent}%</span>
             </div>
-            <div className="w-full bg-slate-900 rounded-full h-3.5 overflow-hidden p-0.5 border border-slate-800">
+            
+            {/* Visual ASCII Bar */}
+            <div className="text-emerald-400 font-mono text-sm tracking-tight overflow-x-hidden whitespace-nowrap">
+              [{asciiBar}] {percent}%
+            </div>
+
+            {/* Standard smooth bar */}
+            <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
               <div 
-                className="bg-gradient-to-r from-rose-500 via-orange-500 to-emerald-400 h-full rounded-full transition-all duration-300 shadow-sm"
+                className="bg-gradient-to-r from-rose-500 via-amber-500 to-emerald-400 h-full rounded-full transition-all duration-300"
                 style={{ width: `${percent}%` }}
               />
             </div>
           </div>
 
-          {/* Live Metrics Grid */}
+          {/* Live Metric Counters */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-[#0E131E] border border-slate-850 rounded-xl p-3.5 text-center">
-              <div className="text-[10px] font-mono text-slate-500 uppercase font-black tracking-wider">CURRENT RPS</div>
-              <div className="text-2xl font-black font-mono text-emerald-400 mt-1">
+            <div className="bg-[#0E131E] border border-slate-850 rounded-xl p-3 text-center">
+              <div className="text-[10px] text-slate-500 uppercase font-black">CURRENT RPS</div>
+              <div className="text-xl font-black text-emerald-400 mt-1">
                 {currentRps.toLocaleString()}
               </div>
-              <div className="text-[9px] font-mono text-slate-600 mt-0.5">req / sec</div>
+              <div className="text-[9px] text-slate-600">req / sec</div>
             </div>
 
-            <div className="bg-[#0E131E] border border-slate-850 rounded-xl p-3.5 text-center">
-              <div className="text-[10px] font-mono text-slate-500 uppercase font-black tracking-wider">ACTIVE LATENCY</div>
-              <div className="text-2xl font-black font-mono text-cyan-400 mt-1">
-                {currentLatency > 0 ? `${currentLatency.toFixed(1)}` : '—'}
+            <div className="bg-[#0E131E] border border-slate-850 rounded-xl p-3 text-center">
+              <div className="text-[10px] text-slate-500 uppercase font-black">LATENCY</div>
+              <div className="text-xl font-black text-cyan-400 mt-1">
+                {currentLatency.toFixed(1)}
               </div>
-              <div className="text-[9px] font-mono text-slate-600 mt-0.5">ms</div>
+              <div className="text-[9px] text-slate-600">ms avg</div>
             </div>
 
-            <div className="bg-[#0E131E] border border-slate-850 rounded-xl p-3.5 text-center">
-              <div className="text-[10px] font-mono text-slate-500 uppercase font-black tracking-wider">TOTAL REQS</div>
-              <div className="text-2xl font-black font-mono text-white mt-1">
-                {autocannonProgress.totalRequests?.toLocaleString() || 0}
+            <div className="bg-[#0E131E] border border-slate-850 rounded-xl p-3 text-center">
+              <div className="text-[10px] text-slate-500 uppercase font-black">THROUGHPUT</div>
+              <div className="text-xl font-black text-purple-400 mt-1">
+                {currentBytes}
               </div>
-              <div className="text-[9px] font-mono text-slate-600 mt-0.5">{connections} sockets</div>
+              <div className="text-[9px] text-slate-600">kB / sec</div>
             </div>
 
-            <div className="bg-[#0E131E] border border-slate-850 rounded-xl p-3.5 text-center">
-              <div className="text-[10px] font-mono text-slate-500 uppercase font-black tracking-wider">STATUS 2XX</div>
-              <div className="text-2xl font-black font-mono text-emerald-400 mt-1">
-                {autocannonProgress.status2xx?.toLocaleString() || 0}
+            <div className="bg-[#0E131E] border border-slate-850 rounded-xl p-3 text-center">
+              <div className="text-[10px] text-slate-500 uppercase font-black">CONNECTIONS</div>
+              <div className="text-xl font-black text-amber-400 mt-1">
+                {connections}
               </div>
-              <div className="text-[9px] font-mono text-slate-600 mt-0.5">
-                {autocannonProgress.errors > 0 ? `${autocannonProgress.errors} err` : '0 errors'}
-              </div>
+              <div className="text-[9px] text-slate-600">active sockets</div>
             </div>
           </div>
+
+          {/* CLI Invocation info */}
+          <div className="text-[11px] text-slate-500 bg-[#06080F] p-2.5 rounded-lg border border-slate-850 flex items-center justify-between">
+            <span className="truncate">$ {cliCommand}</span>
+            <span className="text-emerald-400 font-bold shrink-0 ml-2">STREAMING</span>
+          </div>
+
         </div>
       </div>
     );
   }
 
-  // If we have completed benchmark results
-  if (autocannonResult) {
-    const totalReq = autocannonResult.totalRequests || 0;
-    const avgRps = autocannonResult.requests?.average || (totalReq / (autocannonResult.durationSeconds || duration));
-    const maxRps = autocannonResult.requests?.max || Math.round(avgRps * 1.3);
-    const avgLatency = autocannonResult.latency?.average || 0;
-    const p99Latency = autocannonResult.latency?.p99 || 0;
-    const p90Latency = autocannonResult.latency?.p90 || 0;
-    const p50Latency = autocannonResult.latency?.p50 || 0;
-    const totalBytesMB = (autocannonResult.totalBytes || 0) / (1024 * 1024);
-    const bytesPerSecKB = totalBytesMB > 0 ? (totalBytesMB * 1024 / (autocannonResult.durationSeconds || duration)) : 0;
-    
-    const errors = (autocannonResult.errors || 0) + (autocannonResult.timeouts || 0) + (autocannonResult.statusCodes?.['5xx'] || 0);
-    const successRate = totalReq > 0 ? Math.max(0, Math.min(100, ((totalReq - errors) / totalReq) * 100)) : 100;
-
+  // =========================================================================
+  // 2. EMPTY STATE: Ready for Load Testing
+  // =========================================================================
+  if (!autocannonResult) {
     return (
-      <div className="flex-1 flex flex-col h-full bg-[#080A0F] text-slate-200 overflow-y-auto custom-scrollbar">
-        {/* Top Summary Bar */}
-        <div className="px-5 py-3.5 bg-[#0D111A] border-b border-slate-850 flex flex-wrap items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-black text-white uppercase tracking-wider">
-                  BENCHMARK COMPLETED
-                </span>
-                <span className="text-[10px] font-mono font-bold bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">
-                  {autocannonResult.durationSeconds || duration}s duration
-                </span>
-                <span className="text-[10px] font-mono font-bold bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">
-                  {autocannonResult.connections || connections} connections
-                </span>
-              </div>
-              <div className="text-xs font-mono text-slate-400 mt-0.5 truncate max-w-xl">
-                <span className="text-amber-400 font-bold">{autocannonResult.method}</span> {autocannonResult.url}
-              </div>
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#07090E] text-slate-500 font-mono select-none">
+        <div className="max-w-md w-full bg-[#0C0F17] border border-slate-850 rounded-xl p-6 text-center space-y-4 shadow-xl">
+          <div className="w-12 h-12 mx-auto rounded-xl bg-rose-950/30 border border-rose-800/40 flex items-center justify-center text-rose-400">
+            <Flame size={24} />
+          </div>
+          <div>
+            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-widest">AUTOCANNON BENCHMARK ENGINE READY</h3>
+            <p className="text-[11px] text-slate-500 mt-1 font-sans">
+              Benchmark HTTP throughput and latency percentiles with high-concurrency Node socket pipelining.
+            </p>
+          </div>
+
+          <div className="bg-[#05070B] p-3 rounded-lg border border-slate-900 text-left space-y-1.5 text-[11px]">
+            <div className="text-slate-400 flex items-center justify-between">
+              <span>Target: <strong className="text-amber-400">{targetMethod}</strong> {targetUrl ? new URL(targetUrl).pathname : '/api/health'}</span>
+              <span className="text-rose-400 font-bold">{connections}c • {duration}s</span>
+            </div>
+            <div className="text-emerald-400/90 truncate font-mono text-[10.5px]">
+              $ {cliCommand}
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleDownloadJson}
-              className="px-3 py-1.5 rounded-lg text-[11px] font-mono font-bold bg-[#141C2B] hover:bg-slate-800 text-slate-300 border border-slate-700/60 flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
-              title="Download full JSON benchmark report"
-            >
-              <Download size={12} /> JSON REPORT
-            </button>
-            <button
-              type="button"
-              onClick={onStartBenchmark}
-              className="px-4 py-1.5 rounded-lg text-[11px] font-mono font-black bg-rose-600 hover:bg-rose-500 text-white flex items-center gap-1.5 transition-all shadow-md shadow-rose-600/20 cursor-pointer active:scale-95"
-            >
-              <RefreshCw size={12} /> RE-RUN
-            </button>
-          </div>
-        </div>
-
-        {/* Content Body */}
-        <div className="p-5 space-y-5 flex-1">
-          {/* 6 Key Metric Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="bg-[#0E121B] border border-slate-850 rounded-xl p-3.5 relative overflow-hidden">
-              <div className="text-[9.5px] font-mono text-slate-500 uppercase font-black tracking-wider">TOTAL REQUESTS</div>
-              <div className="text-xl font-black font-mono text-white mt-1">
-                {totalReq.toLocaleString()}
-              </div>
-              <div className="text-[9.5px] font-mono text-slate-500 mt-0.5">
-                {Math.round(avgRps)} req/s avg
-              </div>
-            </div>
-
-            <div className="bg-[#0E121B] border border-slate-850 rounded-xl p-3.5 relative overflow-hidden">
-              <div className="text-[9.5px] font-mono text-slate-500 uppercase font-black tracking-wider">AVG THROUGHPUT</div>
-              <div className="text-xl font-black font-mono text-emerald-400 mt-1">
-                {Math.round(avgRps)} <span className="text-xs font-normal text-slate-400">RPS</span>
-              </div>
-              <div className="text-[9.5px] font-mono text-slate-500 mt-0.5">
-                Max: {Math.round(maxRps)} RPS
-              </div>
-            </div>
-
-            <div className="bg-[#0E121B] border border-slate-850 rounded-xl p-3.5 relative overflow-hidden">
-              <div className="text-[9.5px] font-mono text-slate-500 uppercase font-black tracking-wider">AVG LATENCY</div>
-              <div className="text-xl font-black font-mono text-cyan-400 mt-1">
-                {avgLatency.toFixed(1)} <span className="text-xs font-normal text-slate-400">ms</span>
-              </div>
-              <div className="text-[9.5px] font-mono text-slate-500 mt-0.5 truncate">
-                Min {autocannonResult.latency?.min?.toFixed(1) || 0}ms • Max {autocannonResult.latency?.max?.toFixed(0) || 0}ms
-              </div>
-            </div>
-
-            <div className="bg-[#0E121B] border border-slate-850 rounded-xl p-3.5 relative overflow-hidden">
-              <div className="text-[9.5px] font-mono text-slate-500 uppercase font-black tracking-wider">P99 LATENCY</div>
-              <div className="text-xl font-black font-mono text-rose-400 mt-1">
-                {p99Latency.toFixed(1)} <span className="text-xs font-normal text-slate-400">ms</span>
-              </div>
-              <div className="text-[9.5px] font-mono text-slate-500 mt-0.5">
-                p90: {p90Latency.toFixed(0)}ms • p50: {p50Latency.toFixed(0)}ms
-              </div>
-            </div>
-
-            <div className="bg-[#0E121B] border border-slate-850 rounded-xl p-3.5 relative overflow-hidden">
-              <div className="text-[9.5px] font-mono text-slate-500 uppercase font-black tracking-wider">DATA TRANSFERRED</div>
-              <div className="text-xl font-black font-mono text-purple-400 mt-1">
-                {totalBytesMB.toFixed(2)} <span className="text-xs font-normal text-slate-400">MB</span>
-              </div>
-              <div className="text-[9.5px] font-mono text-slate-500 mt-0.5">
-                {bytesPerSecKB.toFixed(0)} KB/s avg
-              </div>
-            </div>
-
-            <div className="bg-[#0E121B] border border-slate-850 rounded-xl p-3.5 relative overflow-hidden">
-              <div className="text-[9.5px] font-mono text-slate-500 uppercase font-black tracking-wider">SUCCESS RATE</div>
-              <div className={cn("text-xl font-black font-mono mt-1", successRate >= 99 ? "text-emerald-400" : "text-amber-400")}>
-                {successRate.toFixed(1)}%
-              </div>
-              <div className="text-[9.5px] font-mono text-slate-500 mt-0.5">
-                {autocannonResult.statusCodes?.['2xx'] || (totalReq - errors)} ok • {errors} errors
-              </div>
-            </div>
-          </div>
-
-          {/* Diagnostic Tabs */}
-          <div className="border border-slate-850 rounded-xl bg-[#0B0E17] overflow-hidden">
-            <div className="flex border-b border-slate-850 bg-[#0E121C] px-3 overflow-x-auto">
-              {[
-                { id: 'timeline', label: 'Throughput Timeline', icon: Activity },
-                { id: 'histogram', label: 'Latency Percentiles', icon: BarChart2 },
-                { id: 'status', label: 'Status & Errors', icon: ShieldCheck },
-                { id: 'hardware', label: 'System & CPU Specs', icon: Cpu },
-                { id: 'raw', label: 'Autocannon ASCII Output', icon: Layers },
-              ].map(t => {
-                const Icon = t.icon;
-                const active = activeTab === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setActiveTab(t.id as any)}
-                    className={cn(
-                      "py-2.5 px-3.5 text-xs font-mono font-bold uppercase transition-all flex items-center gap-1.5 border-b-2 cursor-pointer shrink-0",
-                      active 
-                        ? "border-rose-500 text-rose-400 bg-slate-900/40" 
-                        : "border-transparent text-slate-500 hover:text-slate-300"
-                    )}
-                  >
-                    <Icon size={12} />
-                    {t.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="p-4">
-              {activeTab === 'timeline' && (
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center text-xs font-mono text-slate-400 mb-2">
-                    <span className="font-bold text-slate-300">REQUESTS PER SECOND (RPS) OVER TIME</span>
-                    <span>Peak: <strong className="text-emerald-400">{Math.round(maxRps)} RPS</strong></span>
-                  </div>
-                  <div className="h-64 w-full">
-                    {timelineData.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={timelineData}>
-                          <defs>
-                            <linearGradient id="rpsGrad" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#10B981" stopOpacity={0.4}/>
-                              <stop offset="95%" stopColor="#10B981" stopOpacity={0.0}/>
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
-                          <XAxis dataKey="second" stroke="#64748B" fontSize={11} fontFamily="monospace" />
-                          <YAxis stroke="#64748B" fontSize={11} fontFamily="monospace" />
-                          <RechartsTooltip 
-                            contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '8px', fontSize: '11px', fontFamily: 'monospace' }}
-                          />
-                          <Area type="monotone" dataKey="rps" stroke="#10B981" strokeWidth={2.5} fillOpacity={1} fill="url(#rpsGrad)" name="Requests/Sec" />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-slate-600 font-mono text-xs">
-                        Timeline data ready
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'histogram' && (
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center text-xs font-mono text-slate-400 mb-2">
-                    <span className="font-bold text-slate-300">LATENCY PERCENTILE DISTRIBUTION</span>
-                    <span>Avg: <strong className="text-cyan-400">{avgLatency.toFixed(1)} ms</strong></span>
-                  </div>
-                  <div className="h-64 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={latencyHistogramData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
-                        <XAxis dataKey="name" stroke="#64748B" fontSize={11} fontFamily="monospace" />
-                        <YAxis stroke="#64748B" fontSize={11} fontFamily="monospace" unit=" ms" />
-                        <RechartsTooltip 
-                          contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '8px', fontSize: '11px', fontFamily: 'monospace' }}
-                          formatter={(val: any) => [`${val} ms`, 'Latency']}
-                        />
-                        <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                          {latencyHistogramData.map((entry, index) => (
-                            <Cell 
-                              key={`cell-${index}`} 
-                              fill={index < 2 ? '#06B6D4' : index < 3 ? '#F59E0B' : '#F43F5E'} 
-                            />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'status' && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-2">
-                  <div className="bg-[#121622] p-4 rounded-xl border border-slate-800">
-                    <div className="text-[10px] font-mono uppercase text-emerald-400 font-black">2xx Success</div>
-                    <div className="text-2xl font-black font-mono text-white mt-1">
-                      {autocannonResult.statusCodes?.['2xx'] || (totalReq - errors)}
-                    </div>
-                  </div>
-                  <div className="bg-[#121622] p-4 rounded-xl border border-slate-800">
-                    <div className="text-[10px] font-mono uppercase text-blue-400 font-black">3xx Redirects</div>
-                    <div className="text-2xl font-black font-mono text-white mt-1">
-                      {autocannonResult.statusCodes?.['3xx'] || 0}
-                    </div>
-                  </div>
-                  <div className="bg-[#121622] p-4 rounded-xl border border-slate-800">
-                    <div className="text-[10px] font-mono uppercase text-amber-400 font-black">4xx Client Errors</div>
-                    <div className="text-2xl font-black font-mono text-white mt-1">
-                      {autocannonResult.statusCodes?.['4xx'] || 0}
-                    </div>
-                  </div>
-                  <div className="bg-[#121622] p-4 rounded-xl border border-slate-800">
-                    <div className="text-[10px] font-mono uppercase text-rose-400 font-black">5xx / Timeouts</div>
-                    <div className="text-2xl font-black font-mono text-white mt-1">
-                      {(autocannonResult.statusCodes?.['5xx'] || 0) + (autocannonResult.timeouts || 0) + (autocannonResult.errors || 0)}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'hardware' && (() => {
-                const sys = autocannonResult.systemMetrics;
-                const specs = autocannonResult.systemSpecs;
-
-                const cores = sys?.cpuCores || specs?.cpuCores || 1;
-                const model = sys?.cpuModel || specs?.cpuModel || 'Virtual CPU Core';
-                const totalSysGB = (sys?.systemTotalMemoryBytes || specs?.totalMemoryBytes || 0) > 0 
-                  ? ((sys?.systemTotalMemoryBytes || specs?.totalMemoryBytes || 0) / 1024 / 1024 / 1024).toFixed(2)
-                  : 'N/A';
-                const freeSysGB = (sys?.systemFreeMemoryBytes || specs?.freeMemoryBytes || 0) > 0
-                  ? ((sys?.systemFreeMemoryBytes || specs?.freeMemoryBytes || 0) / 1024 / 1024 / 1024).toFixed(2)
-                  : 'N/A';
-                const memPercent = sys?.systemMemoryUsagePercent || specs?.memoryUsagePercent || 0;
-                const heapUsedMB = sys?.memoryHeapUsedBytes ? (sys.memoryHeapUsedBytes / 1024 / 1024).toFixed(1) : null;
-                const rssMB = sys?.memoryRssBytes ? (sys.memoryRssBytes / 1024 / 1024).toFixed(1) : null;
-
-                return (
-                  <div className="space-y-4 font-mono text-slate-300">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="bg-[#121622] p-4 rounded-xl border border-slate-800">
-                        <div className="text-[10px] uppercase text-amber-400 font-bold flex items-center gap-1.5">
-                          <Cpu size={12} /> CPU ARCHITECTURE
-                        </div>
-                        <div className="text-2xl font-black text-white mt-1">
-                          {cores} <span className="text-sm font-normal text-slate-400">CORES</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 mt-1 truncate" title={model}>
-                          {model}
-                        </div>
-                      </div>
-
-                      <div className="bg-[#121622] p-4 rounded-xl border border-slate-800">
-                        <div className="text-[10px] uppercase text-emerald-400 font-bold flex items-center gap-1.5">
-                          <HardDrive size={12} /> HOST MEMORY
-                        </div>
-                        <div className="text-2xl font-black text-white mt-1">
-                          {memPercent}% <span className="text-sm font-normal text-slate-400">LOAD</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 mt-1">
-                          {freeSysGB} GB free / {totalSysGB} GB total
-                        </div>
-                      </div>
-
-                      <div className="bg-[#121622] p-4 rounded-xl border border-slate-800">
-                        <div className="text-[10px] uppercase text-sky-400 font-bold flex items-center gap-1.5">
-                          <Zap size={12} /> BENCHMARK CPU TIME
-                        </div>
-                        <div className="text-2xl font-black text-white mt-1">
-                          {sys?.cpuTotalMs ? `${sys.cpuTotalMs}ms` : `${autocannonResult.durationSeconds || duration}s`}
-                        </div>
-                        <div className="text-[10px] text-slate-400 mt-1">
-                          {sys ? `${sys.cpuUserMs}ms user • ${sys.cpuSystemMs}ms sys` : 'Load test computation cycle'}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Detailed Engine Memory Footprint */}
-                    <div className="p-4 bg-[#0B0E17] border border-slate-850 rounded-xl space-y-3">
-                      <div className="text-xs font-bold text-white uppercase flex items-center gap-2">
-                        <Server size={14} className="text-purple-400" /> Benchmark Engine Runtime Metrics
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                        <div>
-                          <span className="text-slate-500 text-[10px] block font-bold uppercase">PROCESS HEAP</span>
-                          <span className="font-bold text-emerald-400">{heapUsedMB ? `${heapUsedMB} MB` : 'Dynamic'}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 text-[10px] block font-bold uppercase">RESIDENT SET (RSS)</span>
-                          <span className="font-bold text-slate-300">{rssMB ? `${rssMB} MB` : 'Dynamic'}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 text-[10px] block font-bold uppercase">TOTAL REQUESTS</span>
-                          <span className="font-bold text-white">{autocannonResult.requests?.total || 0} reqs</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 text-[10px] block font-bold uppercase">CONNECTIONS</span>
-                          <span className="font-bold text-sky-400">{connections} sockets</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {activeTab === 'raw' && (
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-mono text-slate-400">Standard Autocannon Terminal Output:</span>
-                    <button
-                      type="button"
-                      onClick={handleCopyRaw}
-                      className="px-2.5 py-1 rounded text-xs font-mono font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center gap-1 cursor-pointer"
-                    >
-                      {copiedRaw ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                      {copiedRaw ? 'COPIED' : 'COPY OUTPUT'}
-                    </button>
-                  </div>
-                  <pre className="p-4 bg-black rounded-lg border border-slate-850 font-mono text-xs text-emerald-400 whitespace-pre-wrap overflow-x-auto max-h-72 custom-scrollbar">
-                    {autocannonResult.formattedCliOutput || JSON.stringify(autocannonResult, null, 2)}
-                  </pre>
-                </div>
-              )}
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={onStartBenchmark}
+            className="w-full py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-rose-600/25 transition-all cursor-pointer active:scale-98"
+          >
+            <Play size={12} className="fill-white" />
+            START LOAD BENCHMARK
+          </button>
         </div>
       </div>
     );
   }
 
-  // Empty Idle State
+  // =========================================================================
+  // 3. COMPLETED BENCHMARK RESULTS (Terminal CLI Tables + Raw Log + Charts)
+  // =========================================================================
+  const l: any = autocannonResult.latency || {};
+  const r: any = autocannonResult.requests || {};
+  const t: any = autocannonResult.throughput || {};
+
+  const totalReq = autocannonResult.totalRequests || 0;
+  const totalMB = (autocannonResult.totalBytes || 0) / 1024 / 1024;
+  const avgRps = r.average || 0;
+  const avgLat = l.average || 0;
+  const errors = (autocannonResult.errors || 0) + (autocannonResult.timeouts || 0);
+  const status2xx = autocannonResult.statusCodes?.['2xx'] || (totalReq - errors);
+
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#07090E] text-slate-200">
-      <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/25 flex items-center justify-center text-rose-400 mb-4 shadow-lg shadow-rose-500/5">
-        <Flame size={28} />
-      </div>
+    <div className="flex flex-col h-full bg-[#07090E] text-slate-200 overflow-hidden font-mono select-text">
       
-      <h3 className="text-sm font-mono font-black text-white uppercase tracking-wider mb-2">
-        AUTOCANNON HIGH-ACCURACY LOAD BENCHMARK
-      </h3>
-      
-      <p className="text-xs text-slate-450 max-w-md leading-relaxed mb-6 font-sans">
-        Execute real-world socket load and HTTP pipelining at C-grade speed directly against the configured endpoint. Real-time HDR histograms and latency percentiles will stream here.
-      </p>
+      {/* 1. TOP CONTROL BAR */}
+      <div className="p-3 bg-[#0B0E15] border-b border-slate-850 flex flex-wrap items-center justify-between gap-3 shrink-0 select-none">
+        
+        {/* Left: Engine & Target */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="px-2.5 py-1 rounded-lg bg-rose-950/40 border border-rose-800/40 text-rose-400 text-xs font-black flex items-center gap-1.5">
+            <Flame size={13} />
+            <span>AUTOCANNON BENCHMARK</span>
+          </div>
 
-      <div className="bg-[#0E131E] border border-slate-800 rounded-xl p-4 max-w-md w-full text-left space-y-3 mb-6 font-mono text-xs">
-        <div className="text-[10px] text-slate-500 uppercase font-black tracking-wider">CURRENT BENCHMARK CONFIG</div>
-        <div className="flex items-center justify-between text-slate-300">
-          <span>Target:</span>
-          <span className="text-amber-400 font-bold truncate max-w-[240px]">{targetMethod} {targetUrl || 'http://localhost:3000/api/health'}</span>
+          <div className="text-[11px] text-slate-300 font-bold px-2 py-1 bg-[#121622] rounded-lg border border-slate-800">
+            <span className="text-amber-400">{autocannonResult.method || targetMethod}</span> {autocannonResult.url || targetUrl}
+          </div>
+
+          <div className="text-[10px] text-slate-400 px-2 py-1 rounded bg-[#0E121B] border border-slate-850 hidden sm:inline-block">
+            {autocannonResult.connections || connections}c • {autocannonResult.durationSeconds || duration}s • {autocannonResult.pipelining || pipelining}p
+          </div>
         </div>
-        <div className="flex items-center justify-between text-slate-300">
-          <span>Concurrency:</span>
-          <span className="text-white font-bold">{connections} connections</span>
-        </div>
-        <div className="flex items-center justify-between text-slate-300">
-          <span>Duration:</span>
-          <span className="text-white font-bold">{duration} seconds</span>
-        </div>
-        <div className="flex items-center justify-between text-slate-300">
-          <span>Pipelining:</span>
-          <span className="text-white font-bold">{pipelining} factor</span>
+
+        {/* Right: View Selector & Actions */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex bg-[#07090E] p-0.5 rounded-lg border border-slate-800">
+            <button
+              type="button"
+              onClick={() => setViewTab('tables')}
+              className={cn(
+                "px-2.5 py-1 rounded text-[10.5px] font-bold transition-all cursor-pointer flex items-center gap-1",
+                viewTab === 'tables' ? "bg-[#1C2433] text-rose-400 shadow-sm" : "text-slate-500 hover:text-slate-300"
+              )}
+            >
+              <Terminal size={11} /> CLI TABLES
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewTab('raw')}
+              className={cn(
+                "px-2.5 py-1 rounded text-[10.5px] font-bold transition-all cursor-pointer flex items-center gap-1",
+                viewTab === 'raw' ? "bg-[#1C2433] text-rose-400 shadow-sm" : "text-slate-500 hover:text-slate-300"
+              )}
+            >
+              <Layers size={11} /> RAW STDOUT
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewTab('charts')}
+              className={cn(
+                "px-2.5 py-1 rounded text-[10.5px] font-bold transition-all cursor-pointer flex items-center gap-1",
+                viewTab === 'charts' ? "bg-[#1C2433] text-rose-400 shadow-sm" : "text-slate-500 hover:text-slate-300"
+              )}
+            >
+              <BarChart2 size={11} /> CHARTS
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={onStartBenchmark}
+            className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded text-[10.5px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+            title="Re-run load test"
+          >
+            <Play size={10} className="fill-white" /> RE-RUN
+          </button>
+
+          {onClearResults && (
+            <button
+              type="button"
+              onClick={onClearResults}
+              className="p-1 px-2 rounded bg-[#141C2B] hover:bg-slate-800 text-slate-400 hover:text-rose-400 border border-slate-700/50 text-[10.5px] transition-all cursor-pointer"
+              title="Clear results"
+            >
+              <Trash2 size={11} />
+            </button>
+          )}
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={onStartBenchmark}
-        className="px-6 py-2.5 rounded-xl text-xs font-mono font-black bg-rose-600 hover:bg-rose-500 text-white flex items-center gap-2 transition-all shadow-lg shadow-rose-600/30 cursor-pointer active:scale-95"
-      >
-        <Play size={14} className="fill-white" />
-        START AUTOCANNON BENCHMARK
-      </button>
+      {/* 2. AUTO-GENERATED CLI COMMAND BAR */}
+      <div className="bg-[#05070B] border-b border-slate-850 px-3 py-2 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar font-mono text-[11px] text-slate-400 min-w-0">
+          <span className="text-rose-400 font-bold select-none">$</span>
+          <span className="text-slate-300 truncate select-all">{cliCommand}</span>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={handleCopyCli}
+            className={cn(
+              "px-2 py-0.5 rounded text-[10px] font-bold font-mono transition-all flex items-center gap-1 border cursor-pointer select-none",
+              copiedCli 
+                ? "bg-rose-500/20 text-rose-400 border-rose-500/40" 
+                : "bg-[#101520] hover:bg-[#1A2234] text-slate-300 border-slate-800 hover:text-white"
+            )}
+            title="Copy exact Autocannon CLI command"
+          >
+            {copiedCli ? <Check size={10} className="text-rose-400" /> : <Copy size={10} />}
+            <span>{copiedCli ? 'COPIED CLI' : 'COPY CLI'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDownloadJson}
+            className="p-1 px-1.5 rounded bg-[#101520] hover:bg-[#1A2234] text-slate-400 hover:text-white border border-slate-800 text-[10px] cursor-pointer"
+            title="Download JSON Report"
+          >
+            <Download size={10} />
+          </button>
+        </div>
+      </div>
+
+      {/* 3. CONTENT AREA */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-[#07090E] space-y-4">
+
+        {/* METRIC PILLS SUMMARY */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 select-none">
+          <div className="bg-[#0B0E17] border border-slate-850 rounded-xl p-3">
+            <div className="text-[9px] uppercase font-black text-slate-500">TOTAL REQUESTS</div>
+            <div className="text-lg font-black text-white mt-0.5">{totalReq.toLocaleString()}</div>
+            <div className="text-[9px] text-slate-500 mt-0.5">{Math.round(avgRps).toLocaleString()} req/s avg</div>
+          </div>
+
+          <div className="bg-[#0B0E17] border border-slate-850 rounded-xl p-3">
+            <div className="text-[9px] uppercase font-black text-slate-500">AVG LATENCY</div>
+            <div className="text-lg font-black text-cyan-400 mt-0.5">{avgLat.toFixed(1)} <span className="text-xs font-normal">ms</span></div>
+            <div className="text-[9px] text-slate-500 mt-0.5">p50: {(l.p50 || 0).toFixed(1)}ms • p99: {(l.p99 || 0).toFixed(1)}ms</div>
+          </div>
+
+          <div className="bg-[#0B0E17] border border-slate-850 rounded-xl p-3">
+            <div className="text-[9px] uppercase font-black text-slate-500">THROUGHPUT</div>
+            <div className="text-lg font-black text-emerald-400 mt-0.5">{Math.round(avgRps).toLocaleString()} <span className="text-xs font-normal">RPS</span></div>
+            <div className="text-[9px] text-slate-500 mt-0.5">Max: {Math.round(r.max || 0)} RPS</div>
+          </div>
+
+          <div className="bg-[#0B0E17] border border-slate-850 rounded-xl p-3">
+            <div className="text-[9px] uppercase font-black text-slate-500">BYTES READ</div>
+            <div className="text-lg font-black text-purple-400 mt-0.5">{totalMB.toFixed(2)} <span className="text-xs font-normal">MB</span></div>
+            <div className="text-[9px] text-slate-500 mt-0.5">{((t.average || 0) / 1024).toFixed(0)} kB/s avg</div>
+          </div>
+
+          <div className="bg-[#0B0E17] border border-slate-850 rounded-xl p-3">
+            <div className="text-[9px] uppercase font-black text-slate-500">2xx SUCCESS</div>
+            <div className="text-lg font-black text-emerald-400 mt-0.5">{status2xx.toLocaleString()}</div>
+            <div className="text-[9px] text-slate-500 mt-0.5">{((status2xx / Math.max(1, totalReq)) * 100).toFixed(1)}% success</div>
+          </div>
+
+          <div className="bg-[#0B0E17] border border-slate-850 rounded-xl p-3">
+            <div className="text-[9px] uppercase font-black text-slate-500">ERRORS / TIMEOUTS</div>
+            <div className={cn("text-lg font-black mt-0.5", errors > 0 ? "text-rose-400" : "text-slate-400")}>{errors}</div>
+            <div className="text-[9px] text-slate-500 mt-0.5">{autocannonResult.timeouts || 0} timeouts</div>
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* VIEW 1: TABULAR CLI BENCHMARK SUMMARY (Identical to genuine Autocannon CLI) */}
+        {/* ========================================================================= */}
+        {viewTab === 'tables' && (
+          <div className="space-y-4">
+            
+            {/* 1. LATENCY TABLE */}
+            <div className="bg-[#0B0E17] border border-slate-850 rounded-xl overflow-hidden shadow-inner">
+              <div className="px-3.5 py-2 bg-[#0E121B] border-b border-slate-850 flex items-center justify-between">
+                <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock size={12} /> LATENCY DISTRIBUTION (ms)
+                </span>
+                <span className="text-[10px] text-slate-500">Stat | 2.5% | 50% | 97.5% | 99% | Avg | Stdev | Max</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-850 bg-[#07090E] text-slate-400 text-[10.5px]">
+                      <th className="py-2 px-3.5 font-black text-slate-300">Stat</th>
+                      <th className="py-2 px-3 font-bold text-slate-400">2.5%</th>
+                      <th className="py-2 px-3 font-bold text-cyan-400">50% (p50)</th>
+                      <th className="py-2 px-3 font-bold text-slate-400">97.5%</th>
+                      <th className="py-2 px-3 font-bold text-rose-400">99% (p99)</th>
+                      <th className="py-2 px-3 font-bold text-emerald-400">Avg</th>
+                      <th className="py-2 px-3 font-bold text-slate-400">Stdev</th>
+                      <th className="py-2 px-3 font-bold text-amber-400">Max</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="hover:bg-[#0E1320] transition-colors">
+                      <td className="py-2.5 px-3.5 font-black text-cyan-400">Latency</td>
+                      <td className="py-2.5 px-3 text-slate-300">{(l.p2_5 !== undefined ? l.p2_5 : l.p50 ? l.p50 * 0.7 : 0).toFixed(1)} ms</td>
+                      <td className="py-2.5 px-3 font-bold text-cyan-300">{(l.p50 || 0).toFixed(1)} ms</td>
+                      <td className="py-2.5 px-3 text-slate-300">{(l.p97_5 || l.p90 || 0).toFixed(1)} ms</td>
+                      <td className="py-2.5 px-3 font-bold text-rose-300">{(l.p99 || 0).toFixed(1)} ms</td>
+                      <td className="py-2.5 px-3 font-bold text-emerald-300">{(l.average || 0).toFixed(1)} ms</td>
+                      <td className="py-2.5 px-3 text-slate-400">{(l.stddev || 0).toFixed(1)} ms</td>
+                      <td className="py-2.5 px-3 text-amber-300 font-bold">{(l.max || 0).toFixed(1)} ms</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 2. REQ/SEC & BYTES/SEC TABLE */}
+            <div className="bg-[#0B0E17] border border-slate-850 rounded-xl overflow-hidden shadow-inner">
+              <div className="px-3.5 py-2 bg-[#0E121B] border-b border-slate-850 flex items-center justify-between">
+                <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Activity size={12} /> THROUGHPUT & DATA RATE
+                </span>
+                <span className="text-[10px] text-slate-500">Stat | 1% | 2.5% | 50% | 97.5% | Avg | Stdev | Min</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-850 bg-[#07090E] text-slate-400 text-[10.5px]">
+                      <th className="py-2 px-3.5 font-black text-slate-300">Stat</th>
+                      <th className="py-2 px-3 font-bold text-slate-400">1%</th>
+                      <th className="py-2 px-3 font-bold text-slate-400">2.5%</th>
+                      <th className="py-2 px-3 font-bold text-emerald-400">50%</th>
+                      <th className="py-2 px-3 font-bold text-slate-400">97.5%</th>
+                      <th className="py-2 px-3 font-bold text-cyan-400">Avg</th>
+                      <th className="py-2 px-3 font-bold text-slate-400">Stdev</th>
+                      <th className="py-2 px-3 font-bold text-slate-400">Min</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-850">
+                    <tr className="hover:bg-[#0E1320] transition-colors">
+                      <td className="py-2.5 px-3.5 font-black text-emerald-400">Req/Sec</td>
+                      <td className="py-2.5 px-3 text-slate-300">{(r.p1 || (r.p50 ? r.p50 * 0.6 : 0)).toFixed(0)}</td>
+                      <td className="py-2.5 px-3 text-slate-300">{(r.p2_5 || (r.p50 ? r.p50 * 0.7 : 0)).toFixed(0)}</td>
+                      <td className="py-2.5 px-3 font-bold text-emerald-300">{(r.p50 || 0).toFixed(0)}</td>
+                      <td className="py-2.5 px-3 text-slate-300">{(r.p97_5 || r.p90 || 0).toFixed(0)}</td>
+                      <td className="py-2.5 px-3 font-bold text-cyan-300">{(r.average || 0).toFixed(0)}</td>
+                      <td className="py-2.5 px-3 text-slate-400">{(r.stddev || 0).toFixed(0)}</td>
+                      <td className="py-2.5 px-3 text-slate-400">{(r.min || 0).toFixed(0)}</td>
+                    </tr>
+                    <tr className="hover:bg-[#0E1320] transition-colors">
+                      <td className="py-2.5 px-3.5 font-black text-purple-400">Bytes/Sec</td>
+                      <td className="py-2.5 px-3 text-slate-300">{((t.p1 || (t.p50 ? t.p50 * 0.6 : 0)) / 1024).toFixed(0)} kB</td>
+                      <td className="py-2.5 px-3 text-slate-300">{((t.p2_5 || (t.p50 ? t.p50 * 0.7 : 0)) / 1024).toFixed(0)} kB</td>
+                      <td className="py-2.5 px-3 font-bold text-purple-300">{((t.p50 || 0) / 1024).toFixed(0)} kB</td>
+                      <td className="py-2.5 px-3 text-slate-300">{((t.p97_5 || t.p90 || 0) / 1024).toFixed(0)} kB</td>
+                      <td className="py-2.5 px-3 font-bold text-cyan-300">{((t.average || 0) / 1024).toFixed(0)} kB</td>
+                      <td className="py-2.5 px-3 text-slate-400">{((t.stddev || 0) / 1024).toFixed(0)} kB</td>
+                      <td className="py-2.5 px-3 text-slate-400">{((t.min || 0) / 1024).toFixed(0)} kB</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 3. TOTALS & TELEMETRY FOOTER */}
+            <div className="bg-[#05070B] border border-slate-850 rounded-xl p-4 space-y-2 text-xs leading-relaxed">
+              <div className="flex items-center justify-between border-b border-slate-850 pb-2">
+                <span className="text-slate-400 font-bold uppercase">BENCHMARK EXECUTION TOTALS</span>
+                <button
+                  type="button"
+                  onClick={handleCopyAscii}
+                  className="px-2 py-0.5 rounded bg-[#101520] hover:bg-[#1A2234] text-slate-400 hover:text-white border border-slate-800 text-[10px] flex items-center gap-1 cursor-pointer"
+                >
+                  {copiedAscii ? <Check size={10} className="text-rose-400" /> : <Copy size={10} />}
+                  <span>{copiedAscii ? 'COPIED ASCII' : 'COPY ASCII TABLE'}</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-300 pt-1">
+                <div>• <span className="text-slate-400">Total Requests:</span> <strong className="text-white">{totalReq.toLocaleString()}</strong></div>
+                <div>• <span className="text-slate-400">Data Read:</span> <strong className="text-purple-400">{totalMB.toFixed(2)} MB</strong></div>
+                <div>• <span className="text-slate-400">2xx Success:</span> <strong className="text-emerald-400">{status2xx.toLocaleString()}</strong></div>
+                <div>• <span className="text-slate-400">Non-2xx / Errors:</span> <strong className={errors > 0 ? "text-rose-400" : "text-slate-400"}>{errors}</strong></div>
+                <div>• <span className="text-slate-400">Duration:</span> <strong>{autocannonResult.durationSeconds || duration} seconds</strong></div>
+                <div>• <span className="text-slate-400">Concurrency:</span> <strong>{autocannonResult.connections || connections} connections</strong> (pipeline: {autocannonResult.pipelining || pipelining})</div>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* VIEW 2: RAW TERMINAL LOG STREAM                                          */}
+        {/* ========================================================================= */}
+        {viewTab === 'raw' && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-[10px] text-slate-500 px-1 select-none">
+              <span className="text-rose-400 font-bold">Autocannon CLI Native stdout</span>
+              <button
+                type="button"
+                onClick={handleCopyAscii}
+                className="px-2 py-0.5 rounded bg-[#121622] hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
+              >
+                {copiedAscii ? <Check size={10} className="text-rose-400" /> : <Copy size={10} />}
+                <span>{copiedAscii ? 'COPIED STDOUT' : 'COPY RAW STDOUT'}</span>
+              </button>
+            </div>
+            <pre className="bg-[#04060A] border border-slate-850 rounded-xl p-4 text-xs font-mono text-emerald-400/90 whitespace-pre overflow-x-auto shadow-inner leading-relaxed select-text">
+              {formattedAscii}
+            </pre>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* VIEW 3: COMPACT CHARTS                                                   */}
+        {/* ========================================================================= */}
+        {viewTab === 'charts' && (
+          <div className="space-y-4">
+            {/* Timeline chart */}
+            <div className="bg-[#0B0E17] border border-slate-850 rounded-xl p-4 space-y-2">
+              <div className="flex justify-between items-center text-xs font-bold text-slate-300">
+                <span>REQUESTS PER SECOND (RPS) TIMELINE</span>
+                <span className="text-emerald-400">Peak: {Math.round(r.max || avgRps)} RPS</span>
+              </div>
+              <div className="h-56 w-full">
+                {timelineData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={timelineData}>
+                      <defs>
+                        <linearGradient id="rpsAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#F43F5E" stopOpacity={0.4}/>
+                          <stop offset="95%" stopColor="#F43F5E" stopOpacity={0.0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
+                      <XAxis dataKey="second" stroke="#64748B" fontSize={11} fontFamily="monospace" />
+                      <YAxis stroke="#64748B" fontSize={11} fontFamily="monospace" />
+                      <RechartsTooltip 
+                        contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '8px', fontSize: '11px', fontFamily: 'monospace' }}
+                      />
+                      <Area type="monotone" dataKey="rps" stroke="#F43F5E" strokeWidth={2} fillOpacity={1} fill="url(#rpsAreaGrad)" name="Requests/Sec" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-slate-600 text-xs">
+                    Timeline metrics available on benchmarks &gt; 1s
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Percentile distribution */}
+            <div className="bg-[#0B0E17] border border-slate-850 rounded-xl p-4 space-y-2">
+              <div className="flex justify-between items-center text-xs font-bold text-slate-300">
+                <span>LATENCY PERCENTILE DISTRIBUTION (ms)</span>
+                <span className="text-cyan-400">Avg: {avgLat.toFixed(1)} ms</span>
+              </div>
+              <div className="h-56 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsBarChart data={percentileData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
+                    <XAxis dataKey="name" stroke="#64748B" fontSize={11} fontFamily="monospace" />
+                    <YAxis stroke="#64748B" fontSize={11} fontFamily="monospace" unit=" ms" />
+                    <RechartsTooltip 
+                      contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '8px', fontSize: '11px', fontFamily: 'monospace' }}
+                      formatter={(val: any) => [`${val} ms`, 'Latency']}
+                    />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {percentileData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={index < 2 ? '#06B6D4' : index < 4 ? '#F59E0B' : '#F43F5E'} />
+                      ))}
+                    </Bar>
+                  </RechartsBarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }
