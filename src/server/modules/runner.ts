@@ -177,28 +177,9 @@ export class RequestRunner {
             ];
             headers['User-Agent'] = userAgents[Math.floor(Math.random() * userAgents.length)];
             finalRequest.headers = headers;
-
-            // Introduce slight regional routing roundtrip delays only for the explicit distributed lab test
-            if (testModule === 'distributed') {
-              let baseLatency = 0;
-              if (region === 'us') baseLatency = Math.random() * 15 + 5;
-              else if (region === 'eu') baseLatency = Math.random() * 25 + 15;
-              else if (region === 'apac') baseLatency = Math.random() * 40 + 25;
-              else if (region === 'latam') baseLatency = Math.random() * 35 + 20;
-              
-              if (baseLatency > 0) {
-                await new Promise(r => setTimeout(r, baseLatency));
-              }
-            }
           }
 
-        // 1. Race Detector: Tight millisecond collision clustering
-        if (testModule === 'race') {
-          // Force a very small random jitter (0-10ms) to ensure requests hit the server in tight waves
-          await new Promise(r => setTimeout(r, Math.random() * 10));
-        }
-
-        // 2. Payload Fuzzer: Sophisticated mutation
+        // 1. Payload Fuzzer: Mutation testing
         if (testModule === 'fuzzer' && finalRequest.body) {
           try {
             const body = JSON.parse(finalRequest.body);

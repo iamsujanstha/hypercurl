@@ -4,6 +4,7 @@ import { RequestConfig, CurlResult } from '@/server/modules/curl-engine';
 import { ProgressUpdate } from '@/server/modules/runner';
 import { Tab, Collection, SavedRequest, Telemetry, DialogState, AssertionRule, AppView } from '@/features/api-tester/types';
 import { evaluateAssertions } from '@/features/api-tester/assertionEvaluator';
+import { interpolateVariables } from '@/features/api-tester/utils/interpolation';
 
 export function useApiTesterState(initialVariables: Record<string, string> = {}) {
   // Persistence Keys
@@ -456,12 +457,7 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
 
   const resolveVars = useCallback((text: string) => {
     if (!text) return '';
-    let resolved = text;
-    Object.entries(variables).forEach(([key, value]) => {
-      const target = key.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
-      resolved = resolved.replace(new RegExp(`\\{\\{${target}\\}\\}`, 'g'), value as string);
-    });
-    return resolved;
+    return interpolateVariables(text, variables);
   }, [variables]);
 
   const getResolvedConfig = useCallback((tab: Tab): RequestConfig => {
@@ -858,9 +854,11 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
         const dataWithConfig = { ...data, config: resolvedConfig };
         const evaluated = evaluateAssertions(dataWithConfig, activeTab.assertions || []);
         dataWithConfig.assertions = evaluated;
+        (dataWithConfig as any).assertionResults = evaluated;
         const currentResults = Array.isArray(activeTab.results) ? activeTab.results : [];
         updateActiveTab({ 
           result: dataWithConfig,
+          assertionResults: evaluated,
           results: [...currentResults, dataWithConfig]
         });
       } catch (err: any) {
@@ -879,9 +877,11 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
           };
           const evaluated = evaluateAssertions(errorResult, activeTab.assertions || []);
           (errorResult as any).assertions = evaluated;
+          (errorResult as any).assertionResults = evaluated;
           const currentResults = Array.isArray(activeTab.results) ? activeTab.results : [];
           updateActiveTab({ 
             result: errorResult,
+            assertionResults: evaluated,
             results: [...currentResults, errorResult]
           });
         }

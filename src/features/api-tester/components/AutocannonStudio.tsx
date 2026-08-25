@@ -5,7 +5,7 @@ import {
   ShieldCheck, AlertTriangle, Layers, Copy, Check, Download, 
   BarChart2, Cpu, HardDrive, Sliders, Terminal, ArrowRight,
   Sparkles, CheckCircle2, XCircle, ChevronDown, Plus, Trash2,
-  Share2, Shield, Info, Radio, Database
+  Share2, Shield, Info, Radio, Database, Maximize2
 } from 'lucide-react';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, 
@@ -14,6 +14,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Tab, AutocannonBenchmarkResult, AutocannonTickProgress, HttpMethod } from '../types';
 import { AutocannonConfig } from '@/server/modules/autocannon-engine';
+import { CliCommandModal } from './CliCommandModal';
 
 export interface AutocannonStudioProps {
   activeTab: Tab | null;
@@ -48,10 +49,18 @@ export function AutocannonStudio({
   const [rateLimit, setRateLimit] = useState<number | undefined>(undefined);
   const [isRateLimited, setIsRateLimited] = useState<boolean>(false);
   const [timeout, setTimeoutSec] = useState<number>(10);
-  const [activeSubTab, setActiveSubTab] = useState<'headers' | 'body' | 'cli'>('headers');
+  const [warmupDuration, setWarmupDuration] = useState<number>(0);
+  const [enableSla, setEnableSla] = useState<boolean>(true);
+  const [slaMaxErrorRate, setSlaMaxErrorRate] = useState<number>(1.0);
+  const [slaMaxP99Latency, setSlaMaxP99Latency] = useState<number>(500);
+  const [slaMaxP95Latency, setSlaMaxP95Latency] = useState<number>(300);
+  const [slaMinRps, setSlaMinRps] = useState<number>(100);
+  const [slaMaxNon2xx, setSlaMaxNon2xx] = useState<number>(0.0);
+  const [activeSubTab, setActiveSubTab] = useState<'headers' | 'body' | 'sla' | 'cli'>('headers');
   const [copiedCli, setCopiedCli] = useState(false);
   const [copiedTable, setCopiedTable] = useState(false);
-  const [selectedResultTab, setSelectedResultTab] = useState<'overview' | 'percentiles' | 'status' | 'ascii'>('overview');
+  const [showCliModal, setShowCliModal] = useState(false);
+  const [selectedResultTab, setSelectedResultTab] = useState<'overview' | 'sla' | 'percentiles' | 'status' | 'ascii'>('overview');
 
   // Headers and Body state
   const [headersList, setHeadersList] = useState<{ id: string; key: string; value: string }[]>(
@@ -68,14 +77,6 @@ export function AutocannonStudio({
       if (activeTab.config.body) setRequestBody(activeTab.config.body);
     }
   }, [activeTab]);
-
-  const handleImportActiveTab = () => {
-    if (!activeTab) return;
-    setUrl(activeTab.config.url || 'http://localhost:3000/api/health');
-    setMethod((activeTab.config.method as HttpMethod) || 'GET');
-    setHeadersList(activeTab.headersList || [{ id: '1', key: 'Content-Type', value: 'application/json' }]);
-    setRequestBody(activeTab.config.body || '');
-  };
 
   const getResolvedUrl = (rawUrl: string): string => {
     let resolved = rawUrl;
@@ -114,10 +115,18 @@ export function AutocannonStudio({
       body: (method === 'POST' || method === 'PUT' || method === 'PATCH') ? finalBody : undefined,
       connections,
       duration,
+      warmupDuration: warmupDuration > 0 ? warmupDuration : undefined,
       pipelining,
       rate: isRateLimited && rateLimit ? rateLimit : undefined,
       timeout,
-      title: `${method} ${finalUrl}`
+      title: `${method} ${finalUrl}`,
+      slaThresholds: enableSla ? {
+        maxErrorRatePercent: slaMaxErrorRate,
+        maxP99LatencyMs: slaMaxP99Latency,
+        maxP95LatencyMs: slaMaxP95Latency,
+        minThroughputRps: slaMinRps,
+        maxNon2xxRatePercent: slaMaxNon2xx
+      } : undefined
     };
 
     onStartAutocannon(config);
@@ -130,9 +139,10 @@ export function AutocannonStudio({
       .map(h => `-H "${h.key.trim()}: ${h.value}"`)
       .join(' ');
     const rateFlag = isRateLimited && rateLimit ? `--rate ${rateLimit}` : '';
+    const warmupFlag = warmupDuration > 0 ? `-w ${warmupDuration}` : '';
     const bodyFlag = (method === 'POST' || method === 'PUT' || method === 'PATCH') && requestBody ? `-b '${requestBody}'` : '';
-    return `autocannon -c ${connections} -d ${duration} -p ${pipelining} -m ${method} ${headerFlags} ${bodyFlag} ${rateFlag} "${url}"`.replace(/\s+/g, ' ').trim();
-  }, [connections, duration, pipelining, method, headersList, requestBody, isRateLimited, rateLimit, url]);
+    return `autocannon -c ${connections} -d ${duration} ${warmupFlag} -p ${pipelining} -m ${method} ${headerFlags} ${bodyFlag} ${rateFlag} "${url}"`.replace(/\s+/g, ' ').trim();
+  }, [connections, duration, warmupDuration, pipelining, method, headersList, requestBody, isRateLimited, rateLimit, url]);
 
   const handleCopyCli = () => {
     navigator.clipboard.writeText(generatedCliCommand);
@@ -201,18 +211,6 @@ export function AutocannonStudio({
         </div>
 
         <div className="flex items-center gap-3">
-          {activeTab && (
-            <button
-              type="button"
-              onClick={handleImportActiveTab}
-              className="px-3.5 py-2 rounded-xl text-xs font-mono font-bold autocannon-secondary-btn flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95"
-              title="Import URL, Method, Headers and Body from active API Client tab"
-            >
-              <Sparkles size={14} className="text-amber-500" />
-              IMPORT ACTIVE TAB
-            </button>
-          )}
-
           {isExecuting ? (
             <button
               type="button"
@@ -503,7 +501,31 @@ export function AutocannonStudio({
                 </div>
               </div>
 
-              {/* Slider 3: HTTP Pipelining Factor */}
+              {/* Slider 3: Stepped Ramp-Up / Warmup Duration */}
+              <div className="space-y-2 pt-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-[11px] font-mono font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                    <Activity size={14} className="text-emerald-400" /> WARMUP / RAMP-UP:
+                  </span>
+                  <span className="text-xs font-mono font-black text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-md border border-emerald-500/30 shadow-xs">
+                    {warmupDuration > 0 ? `${warmupDuration}s Ramp-Up` : 'Instant Load'}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="15"
+                  step="1"
+                  value={warmupDuration}
+                  onChange={(e) => setWarmupDuration(Number(e.target.value))}
+                  className="w-full accent-emerald-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
+                />
+                <div className="text-[9.5px] text-slate-400 leading-relaxed font-sans">
+                  Gradually scale socket connections during initial seconds before recording benchmark telemetry.
+                </div>
+              </div>
+
+              {/* Slider 4: HTTP Pipelining Factor */}
               <div className="space-y-2 pt-1">
                 <div className="flex justify-between items-center">
                   <span className="text-[11px] font-mono font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
@@ -562,14 +584,14 @@ export function AutocannonStudio({
                 </div>
               </div>
 
-              {/* Sub-tabs for Headers / Body / CLI command preview */}
+              {/* Sub-tabs for Headers / Body / SLA Quality Gates / CLI command preview */}
               <div className="pt-2">
-                <div className="flex border-b border-slate-800 text-[11px] font-mono font-bold gap-2">
+                <div className="flex border-b border-slate-800 text-[11px] font-mono font-bold gap-2 overflow-x-auto no-scrollbar">
                   <button
                     type="button"
                     onClick={() => setActiveSubTab('headers')}
                     className={cn(
-                      "px-3 py-2 border-b-2 cursor-pointer transition-all flex items-center gap-1.5",
+                      "px-3 py-2 border-b-2 cursor-pointer transition-all flex items-center gap-1.5 shrink-0",
                       activeSubTab === 'headers' 
                         ? "border-amber-500 dark:border-amber-400 text-amber-600 dark:text-amber-400 font-black" 
                         : "border-transparent text-slate-400 hover:text-slate-200"
@@ -581,7 +603,7 @@ export function AutocannonStudio({
                     type="button"
                     onClick={() => setActiveSubTab('body')}
                     className={cn(
-                      "px-3 py-2 border-b-2 cursor-pointer transition-all flex items-center gap-1.5",
+                      "px-3 py-2 border-b-2 cursor-pointer transition-all flex items-center gap-1.5 shrink-0",
                       activeSubTab === 'body' 
                         ? "border-amber-500 dark:border-amber-400 text-amber-600 dark:text-amber-400 font-black" 
                         : "border-transparent text-slate-400 hover:text-slate-200"
@@ -591,9 +613,21 @@ export function AutocannonStudio({
                   </button>
                   <button
                     type="button"
+                    onClick={() => setActiveSubTab('sla')}
+                    className={cn(
+                      "px-3 py-2 border-b-2 cursor-pointer transition-all flex items-center gap-1.5 shrink-0",
+                      activeSubTab === 'sla' 
+                        ? "border-amber-500 dark:border-amber-400 text-amber-600 dark:text-amber-400 font-black" 
+                        : "border-transparent text-slate-400 hover:text-slate-200"
+                    )}
+                  >
+                    <ShieldCheck size={12} /> SLA GATES
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setActiveSubTab('cli')}
                     className={cn(
-                      "px-3 py-2 border-b-2 cursor-pointer transition-all flex items-center gap-1.5",
+                      "px-3 py-2 border-b-2 cursor-pointer transition-all flex items-center gap-1.5 shrink-0",
                       activeSubTab === 'cli' 
                         ? "border-amber-500 dark:border-amber-400 text-amber-600 dark:text-amber-400 font-black" 
                         : "border-transparent text-slate-400 hover:text-slate-200"
@@ -665,6 +699,107 @@ export function AutocannonStudio({
                     </div>
                   )}
 
+                  {activeSubTab === 'sla' && (
+                    <div className="space-y-3.5">
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#0A0D14] border border-slate-750">
+                        <div>
+                          <div className="text-xs font-mono font-bold text-slate-200">Enforce SLA Quality Gates</div>
+                          <div className="text-[10px] text-slate-400">Evaluate pass/fail criteria after benchmark execution</div>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={enableSla}
+                          onChange={(e) => setEnableSla(e.target.checked)}
+                          className="accent-amber-500 cursor-pointer w-4 h-4"
+                        />
+                      </div>
+
+                      <div className="space-y-2.5 opacity-100 transition-opacity">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-mono font-bold text-slate-300 uppercase tracking-wider flex justify-between">
+                            <span>Max Allowed Error Rate (%)</span>
+                            <span className="text-rose-400 font-bold">≤ {slaMaxErrorRate}%</span>
+                          </label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="100"
+                            disabled={!enableSla}
+                            value={slaMaxErrorRate}
+                            onChange={(e) => setSlaMaxErrorRate(Number(e.target.value))}
+                            className="w-full bg-[#0A0D14] border border-slate-750 disabled:opacity-40 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-100 outline-none focus:border-amber-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-mono font-bold text-slate-300 uppercase tracking-wider flex justify-between">
+                            <span>Max p99 Latency SLA (ms)</span>
+                            <span className="text-amber-400 font-bold">≤ {slaMaxP99Latency} ms</span>
+                          </label>
+                          <input
+                            type="number"
+                            step="10"
+                            min="1"
+                            disabled={!enableSla}
+                            value={slaMaxP99Latency}
+                            onChange={(e) => setSlaMaxP99Latency(Number(e.target.value))}
+                            className="w-full bg-[#0A0D14] border border-slate-750 disabled:opacity-40 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-100 outline-none focus:border-amber-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-mono font-bold text-slate-300 uppercase tracking-wider flex justify-between">
+                            <span>Max p95 Latency SLA (ms)</span>
+                            <span className="text-cyan-400 font-bold">≤ {slaMaxP95Latency} ms</span>
+                          </label>
+                          <input
+                            type="number"
+                            step="10"
+                            min="1"
+                            disabled={!enableSla}
+                            value={slaMaxP95Latency}
+                            onChange={(e) => setSlaMaxP95Latency(Number(e.target.value))}
+                            className="w-full bg-[#0A0D14] border border-slate-750 disabled:opacity-40 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-100 outline-none focus:border-amber-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-mono font-bold text-slate-300 uppercase tracking-wider flex justify-between">
+                            <span>Min Throughput RPS</span>
+                            <span className="text-emerald-400 font-bold">≥ {slaMinRps} req/s</span>
+                          </label>
+                          <input
+                            type="number"
+                            step="10"
+                            min="0"
+                            disabled={!enableSla}
+                            value={slaMinRps}
+                            onChange={(e) => setSlaMinRps(Number(e.target.value))}
+                            className="w-full bg-[#0A0D14] border border-slate-750 disabled:opacity-40 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-100 outline-none focus:border-amber-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-mono font-bold text-slate-300 uppercase tracking-wider flex justify-between">
+                            <span>Max Non-2xx Responses (%)</span>
+                            <span className="text-purple-400 font-bold">≤ {slaMaxNon2xx}%</span>
+                          </label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="100"
+                            disabled={!enableSla}
+                            value={slaMaxNon2xx}
+                            onChange={(e) => setSlaMaxNon2xx(Number(e.target.value))}
+                            className="w-full bg-[#0A0D14] border border-slate-750 disabled:opacity-40 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-100 outline-none focus:border-amber-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {activeSubTab === 'cli' && (
                     <div className="space-y-2.5">
                       <div className="relative group rounded-xl overflow-hidden border border-slate-800 bg-[#090C12] cli-terminal-container shadow-sm">
@@ -675,21 +810,48 @@ export function AutocannonStudio({
                             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
                             <span className="text-[10px] font-mono text-slate-400 ml-2 font-bold cli-terminal-label">TERMINAL COMMAND</span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={handleCopyCli}
-                            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-mono text-slate-200 flex items-center gap-1 cursor-pointer shadow transition-all"
-                          >
-                            {copiedCli ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                            {copiedCli ? 'COPIED' : 'COPY'}
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setShowCliModal(true)}
+                              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-mono text-slate-200 flex items-center gap-1 cursor-pointer shadow transition-all hover:text-white"
+                              title="Expand command inspector modal"
+                            >
+                              <Maximize2 size={10} className="text-amber-400" />
+                              <span>EXPAND POPUP</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleCopyCli}
+                              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-mono text-slate-200 flex items-center gap-1 cursor-pointer shadow transition-all"
+                            >
+                              {copiedCli ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                              {copiedCli ? 'COPIED' : 'COPY'}
+                            </button>
+                          </div>
                         </div>
-                        <pre className="p-3.5 font-mono text-xs text-amber-400 dark:text-amber-300 overflow-x-auto whitespace-pre-wrap select-all font-semibold cli-terminal-code leading-relaxed">
-                          {generatedCliCommand}
-                        </pre>
+                        <div
+                          onClick={() => setShowCliModal(true)}
+                          className="cursor-pointer group/code p-3.5 hover:bg-slate-900/40 transition-colors relative"
+                          title="Click to open CLI modal inspector"
+                        >
+                          <pre className="font-mono text-xs text-amber-400 dark:text-amber-300 overflow-x-auto whitespace-pre-wrap select-all font-semibold cli-terminal-code leading-relaxed">
+                            {generatedCliCommand}
+                          </pre>
+                          <div className="absolute right-3 bottom-2 opacity-0 group-hover/code:opacity-100 transition-opacity text-[10px] font-mono text-slate-400 bg-slate-800/90 px-2 py-0.5 rounded border border-slate-700 flex items-center gap-1">
+                            <Maximize2 size={10} className="text-amber-400" /> Click to expand
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-[10px] text-slate-400 font-mono leading-relaxed">
-                        HyperCurl runs this exact benchmarking logic natively inside its server runtime, eliminating the need to install or run terminal tools manually.
+                      <div className="text-[10px] text-slate-400 font-mono leading-relaxed flex items-center justify-between">
+                        <span>HyperCurl runs this exact benchmarking logic natively in server runtime.</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowCliModal(true)}
+                          className="text-amber-400 hover:text-amber-300 underline font-semibold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Terminal size={11} /> Open CLI Inspector
+                        </button>
                       </div>
                     </div>
                   )}
@@ -748,6 +910,54 @@ export function AutocannonStudio({
                     </button>
                   </div>
                 </div>
+
+                {/* SLA Quality Gate Contract Banner (if evaluated) */}
+                {autocannonResult.slaReport && (
+                  <div className={cn(
+                    "p-4 rounded-xl border flex flex-wrap items-center justify-between gap-3 shadow-md",
+                    autocannonResult.slaReport.passed
+                      ? "bg-emerald-950/40 border-emerald-700/60 text-emerald-300"
+                      : "bg-rose-950/40 border-rose-700/60 text-rose-300"
+                  )}>
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "w-9 h-9 rounded-lg flex items-center justify-center border shrink-0",
+                        autocannonResult.slaReport.passed
+                          ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
+                          : "bg-rose-900/60 border-rose-600 text-rose-300"
+                      )}>
+                        {autocannonResult.slaReport.passed ? <CheckCircle2 size={20} /> : <XCircle size={20} />}
+                      </div>
+                      <div>
+                        <div className="text-xs font-mono font-black uppercase tracking-wider flex items-center gap-2">
+                          <span>SLA CONTRACT: {autocannonResult.slaReport.passed ? 'ALL THRESHOLDS PASSED' : 'SLA VIOLATIONS DETECTED'}</span>
+                          <span className={cn(
+                            "px-2 py-0.5 rounded text-[10px] font-bold font-mono border",
+                            autocannonResult.slaReport.passed
+                              ? "bg-emerald-950 border-emerald-700 text-emerald-400"
+                              : "bg-rose-950 border-rose-700 text-rose-400"
+                          )}>
+                            {autocannonResult.slaReport.totalChecks > 0 ? Math.round((autocannonResult.slaReport.passedChecks / autocannonResult.slaReport.totalChecks) * 100) : 0}% PASS
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {autocannonResult.slaReport.passed
+                            ? 'The endpoint satisfied all latency, error rate, throughput, and HTTP contract thresholds.'
+                            : `${autocannonResult.slaReport.totalChecks - autocannonResult.slaReport.passedChecks} out of ${autocannonResult.slaReport.totalChecks} SLA quality gates were breached during this load test.`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedResultTab('sla')}
+                      className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold bg-[#0A0D14] hover:bg-slate-800 text-slate-200 border border-slate-700 transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>VIEW AUDIT BREAKDOWN</span>
+                      <ArrowRight size={13} />
+                    </button>
+                  </div>
+                )}
 
                 {/* Primary KPI Metric Cards (6 Cards with High Contrast) */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
@@ -865,6 +1075,21 @@ export function AutocannonStudio({
                   >
                     <BarChart2 size={14} /> TIMELINE TREND
                   </button>
+                  {autocannonResult.slaReport && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedResultTab('sla')}
+                      className={cn(
+                        "px-4 py-2 text-xs font-mono font-bold border-b-2 cursor-pointer transition-all flex items-center gap-1.5",
+                        selectedResultTab === 'sla' 
+                          ? "border-amber-400 text-amber-400 font-black" 
+                          : "border-transparent text-slate-400 hover:text-slate-200"
+                      )}
+                    >
+                      <ShieldCheck size={14} className={autocannonResult.slaReport.passed ? "text-emerald-400" : "text-rose-400"} />
+                      <span>SLA CONTRACT AUDIT ({autocannonResult.slaReport.passedChecks}/{autocannonResult.slaReport.totalChecks})</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setSelectedResultTab('percentiles')}
@@ -998,6 +1223,69 @@ export function AutocannonStudio({
                         <span className="flex items-center gap-1.5 text-purple-400 font-bold">
                           <span className="w-2 h-2 rounded-full bg-purple-500" /> Socket Errors: {autocannonResult.errors}
                         </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab Content: SLA Contract Audit */}
+                {selectedResultTab === 'sla' && autocannonResult.slaReport && (
+                  <div className="space-y-4">
+                    <div className="p-4 rounded-2xl bg-[#0A0D14] border border-slate-800/90 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                          <ShieldCheck size={16} className={autocannonResult.slaReport.passed ? "text-emerald-400" : "text-rose-400"} />
+                          <span>Quality Gate Contract Specifications</span>
+                        </div>
+                        <span className={cn(
+                          "px-2.5 py-1 rounded-full text-[10px] font-mono font-bold border",
+                          autocannonResult.slaReport.passed
+                            ? "bg-emerald-950/60 border-emerald-700 text-emerald-400"
+                            : "bg-rose-950/60 border-rose-700 text-rose-400"
+                        )}>
+                          {autocannonResult.slaReport.passedChecks}/{autocannonResult.slaReport.totalChecks} RULES PASSED ({autocannonResult.slaReport.totalChecks > 0 ? Math.round((autocannonResult.slaReport.passedChecks / autocannonResult.slaReport.totalChecks) * 100) : 0}%)
+                        </span>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left font-mono text-xs border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-800 text-[10px] text-slate-400 uppercase">
+                              <th className="py-2 px-3">Status</th>
+                              <th className="py-2 px-3">SLA Metric / Contract Rule</th>
+                              <th className="py-2 px-3">Target Threshold</th>
+                              <th className="py-2 px-3">Actual Measured Value</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60">
+                            {autocannonResult.slaReport.checks.map((check) => (
+                              <tr key={check.id} className={check.passed ? "hover:bg-emerald-950/10" : "bg-rose-950/20 hover:bg-rose-950/30"}>
+                                <td className="py-2.5 px-3 whitespace-nowrap">
+                                  {check.passed ? (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                                      <CheckCircle2 size={12} /> PASS
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-800">
+                                      <XCircle size={12} /> FAIL
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 font-semibold text-slate-200">
+                                  {check.name}
+                                </td>
+                                <td className="py-2.5 px-3 text-slate-400">
+                                  {check.target}
+                                </td>
+                                <td className="py-2.5 px-3 font-bold">
+                                  <span className={check.passed ? "text-emerald-400" : "text-rose-400 font-black"}>
+                                    {check.actual}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   </div>
@@ -1189,6 +1477,23 @@ export function AutocannonStudio({
           </div>
         </div>
       </div>
+
+      {/* CLI Command Modal for Autocannon */}
+      <CliCommandModal
+        isOpen={showCliModal}
+        onClose={() => setShowCliModal(false)}
+        commandType="autocannon"
+        title="Autocannon Load Testing CLI Inspector"
+        singleLineCommand={generatedCliCommand}
+        multilineCommand={generatedCliCommand}
+        method={method}
+        url={url}
+        headers={headersList.reduce((acc, h) => {
+          if (h.key.trim()) acc[h.key.trim()] = h.value;
+          return acc;
+        }, {} as Record<string, string>)}
+        body={requestBody}
+      />
     </div>
   );
 }

@@ -5,6 +5,29 @@ import { SystemHardwareSpecs, RequestSystemMetrics } from '@/server/modules/syst
 
 export type { AutocannonBenchmarkResult, AutocannonTickProgress, SystemHardwareSpecs, RequestSystemMetrics };
 
+export interface AutocannonSlaThresholds {
+  maxErrorRatePercent?: number; // e.g. 1.0 (%)
+  maxP99LatencyMs?: number; // e.g. 500 (ms)
+  maxP95LatencyMs?: number; // e.g. 300 (ms)
+  minThroughputRps?: number; // e.g. 100 (req/s)
+  maxNon2xxRatePercent?: number; // e.g. 0.0 (%)
+}
+
+export interface AutocannonSlaCheck {
+  id: string;
+  name: string;
+  target: string;
+  actual: string;
+  passed: boolean;
+}
+
+export interface AutocannonSlaReport {
+  passed: boolean;
+  totalChecks: number;
+  passedChecks: number;
+  checks: AutocannonSlaCheck[];
+}
+
 export const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'GRAPHQL'] as const;
 
 export type HttpMethod = typeof METHODS[number];
@@ -76,6 +99,7 @@ export interface SavedRequest extends RequestConfig {
   graphqlVariables?: string;
   headersList: { id: string, key: string, value: string }[];
   assertions?: AssertionRule[];
+  assertionResults?: AssertionResult[];
   extractors?: ResponseExtractorRule[];
   authConfig?: AuthConfig;
 }
@@ -103,11 +127,14 @@ export interface Tab {
   loading: boolean;
   progress: null | ProgressUpdate;
   assertions?: AssertionRule[];
+  assertionResults?: AssertionResult[];
   extractors?: ResponseExtractorRule[];
   authConfig?: AuthConfig;
   labResults?: Record<string, CurlResult[]>;
   autocannonResult?: AutocannonBenchmarkResult | null;
   autocannonProgress?: AutocannonTickProgress['progress'] | null;
+  slaThresholds?: AutocannonSlaThresholds;
+  warmupDuration?: number;
   testMode?: TestExecutionMode;
   testConfig?: {
     connections?: number;

@@ -39,12 +39,22 @@ export class Store {
 
   static async saveCollection(collection: any) {
     const collections = await this.getCollections();
-    const index = collections.findIndex((c: any) => c.name === collection.name);
+    const index = collections.findIndex((c: any) => (c.id && collection.id && c.id === collection.id) || c.name === collection.name);
     if (index >= 0) {
       collections[index] = collection;
     } else {
       collections.push(collection);
     }
-    await fs.writeFile(COLLECTIONS_FILE, JSON.stringify(collections));
+    await fs.writeFile(COLLECTIONS_FILE, JSON.stringify(collections, null, 2));
+  }
+
+  static async deleteCollection(idOrName: string) {
+    const collections = await this.getCollections();
+    const filtered = collections.filter((c: any) => c.id !== idOrName && c.name !== idOrName);
+    await fs.writeFile(COLLECTIONS_FILE, JSON.stringify(filtered, null, 2));
+  }
+
+  static async clearHistory() {
+    await fs.writeFile(HISTORY_FILE, JSON.stringify([]));
   }
 }

@@ -1,5 +1,29 @@
 import autocannon, { Options, Result } from 'autocannon';
 import { SystemMetrics, RequestSystemMetrics, SystemHardwareSpecs } from './system-metrics';
+import { SecurityGuard } from './security';
+
+export interface AutocannonSlaThresholds {
+  maxErrorRatePercent?: number; // e.g. 1.0 (%)
+  maxP99LatencyMs?: number; // e.g. 500 (ms)
+  maxP95LatencyMs?: number; // e.g. 300 (ms)
+  minThroughputRps?: number; // e.g. 100 (req/s)
+  maxNon2xxRatePercent?: number; // e.g. 0.0 (%)
+}
+
+export interface AutocannonSlaCheck {
+  id: string;
+  name: string;
+  target: string;
+  actual: string;
+  passed: boolean;
+}
+
+export interface AutocannonSlaReport {
+  passed: boolean;
+  totalChecks: number;
+  passedChecks: number;
+  checks: AutocannonSlaCheck[];
+}
 
 export interface AutocannonConfig {
   url: string;
@@ -12,6 +36,8 @@ export interface AutocannonConfig {
   amount?: number;
   rate?: number; // requests per second cap
   timeout?: number; // in seconds
+  warmupDuration?: number; // in seconds (stepped socket ramp-up)
+  slaThresholds?: AutocannonSlaThresholds;
   title?: string;
 }
 
@@ -105,6 +131,7 @@ export interface AutocannonBenchmarkResult {
     percentile: string;
     value: number;
   }[];
+  slaReport?: AutocannonSlaReport;
   formattedCliOutput: string;
   cliCommand: string;
   startTime: number;
@@ -135,13 +162,21 @@ export class AutocannonEngine {
     // Clean up any existing instance with this key
     this.stop(key);
 
+    // SSRF & Target Security Validation
+    const secCheck = SecurityGuard.validateTargetUrl(config.url);
+    if (!secCheck.allowed) {
+      throw new Error(`Security Blocked (SSRF Prevention): ${secCheck.reason}`);
+    }
+
+    const { sanitized } = SecurityGuard.sanitizeAutocannonConfig(config);
+
     const startTime = Date.now();
     const startCpu = process.cpuUsage();
     const startMem = process.memoryUsage();
-    const durationSeconds = Math.max(1, Math.min(120, config.duration || 10));
-    const connections = Math.max(1, Math.min(1000, config.connections || 10));
-    const pipelining = Math.max(1, Math.min(32, config.pipelining || 1));
-    const method = (config.method || 'GET').toUpperCase() as any;
+    const durationSeconds = Math.max(1, Math.min(120, sanitized.duration || 10));
+    const connections = Math.max(1, Math.min(1000, sanitized.connections || 10));
+    const pipelining = Math.max(1, Math.min(32, sanitized.pipelining || 1));
+    const method = (sanitized.method || 'GET').toUpperCase() as any;
 
     const opts: Options = {
       url: config.url,
@@ -159,6 +194,11 @@ export class AutocannonEngine {
     }
     if (config.rate && config.rate > 0) {
       opts.overallRate = config.rate;
+    }
+    if (config.warmupDuration && config.warmupDuration > 0) {
+      (opts as any).warmup = {
+        duration: Math.min(30, config.warmupDuration)
+      };
     }
 
     const timeline: { second: number; rps: number; latency: number; bytes: number }[] = [];
@@ -230,6 +270,83 @@ ${connections} connections with ${pipelining} pipelining factor
         const systemMetrics = SystemMetrics.createRequestSnapshot(startCpu, startMem, elapsedTotalMs);
         const systemSpecs = SystemMetrics.getSpecs();
 
+        // Evaluate SLA Thresholds
+        let slaReport: AutocannonSlaReport | undefined;
+        if (config.slaThresholds) {
+          const thresholds = config.slaThresholds;
+          const totalRequests = result.requests.total || 0;
+          const checks: AutocannonSlaCheck[] = [];
+
+          if (thresholds.maxErrorRatePercent !== undefined) {
+            const actualErrorRate = totalRequests > 0 ? ((result.errors || 0) / totalRequests) * 100 : 0;
+            const passed = actualErrorRate <= thresholds.maxErrorRatePercent;
+            checks.push({
+              id: 'sla-error-rate',
+              name: 'Max Error Rate',
+              target: `≤ ${thresholds.maxErrorRatePercent.toFixed(1)}%`,
+              actual: `${actualErrorRate.toFixed(2)}%`,
+              passed
+            });
+          }
+
+          if (thresholds.maxP99LatencyMs !== undefined) {
+            const p99Val = result.latency.p99 || 0;
+            const passed = p99Val <= thresholds.maxP99LatencyMs;
+            checks.push({
+              id: 'sla-p99-latency',
+              name: 'Max p99 Latency SLA',
+              target: `≤ ${thresholds.maxP99LatencyMs} ms`,
+              actual: `${p99Val.toFixed(1)} ms`,
+              passed
+            });
+          }
+
+          if (thresholds.maxP95LatencyMs !== undefined) {
+            const p95Val = (result.latency as any).p95 || (result.latency.p90 + result.latency.p97_5) / 2 || 0;
+            const passed = p95Val <= thresholds.maxP95LatencyMs;
+            checks.push({
+              id: 'sla-p95-latency',
+              name: 'Max p95 Latency SLA',
+              target: `≤ ${thresholds.maxP95LatencyMs} ms`,
+              actual: `${p95Val.toFixed(1)} ms`,
+              passed
+            });
+          }
+
+          if (thresholds.minThroughputRps !== undefined) {
+            const actualRps = result.requests.average || 0;
+            const passed = actualRps >= thresholds.minThroughputRps;
+            checks.push({
+              id: 'sla-min-throughput',
+              name: 'Min Throughput RPS',
+              target: `≥ ${thresholds.minThroughputRps} req/s`,
+              actual: `${Math.round(actualRps).toLocaleString()} req/s`,
+              passed
+            });
+          }
+
+          if (thresholds.maxNon2xxRatePercent !== undefined) {
+            const non2xx = result.non2xx || 0;
+            const actualNon2xxRate = totalRequests > 0 ? (non2xx / totalRequests) * 100 : 0;
+            const passed = actualNon2xxRate <= thresholds.maxNon2xxRatePercent;
+            checks.push({
+              id: 'sla-non-2xx-rate',
+              name: 'Max Non-2xx Responses',
+              target: `≤ ${thresholds.maxNon2xxRatePercent.toFixed(1)}%`,
+              actual: `${actualNon2xxRate.toFixed(2)}%`,
+              passed
+            });
+          }
+
+          const passedCount = checks.filter(c => c.passed).length;
+          slaReport = {
+            passed: checks.length > 0 && passedCount === checks.length,
+            totalChecks: checks.length,
+            passedChecks: passedCount,
+            checks
+          };
+        }
+
         const benchmarkResult: AutocannonBenchmarkResult = {
           title: config.title || 'Autocannon Load Test',
           url: config.url,
@@ -243,6 +360,7 @@ ${connections} connections with ${pipelining} pipelining factor
           durationSeconds: durationSec,
           systemMetrics,
           systemSpecs,
+          slaReport,
           requests: {
             average: result.requests.average || 0,
             mean: result.requests.mean || 0,

@@ -4,7 +4,8 @@ import {
   Play, Square, Plus, Trash2, Edit3, Copy, Download, CheckCircle2, 
   XCircle, AlertCircle, Clock, ArrowRight, Layers, FileCode, 
   Terminal, Sliders, ChevronRight, Check, RefreshCw, Eye, 
-  Sparkles, ExternalLink, ShieldCheck, Zap, Server, ChevronDown, ListChecks
+  Sparkles, ExternalLink, ShieldCheck, Zap, Server, ChevronDown, ListChecks,
+  Maximize2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { 
@@ -14,6 +15,7 @@ import {
 import { DEFAULT_TEST_SUITES } from '../../data/defaultSuites';
 import { evaluateAssertions } from '../../assertionEvaluator';
 import { CurlResult } from '@/server/modules/curl-engine';
+import { CliCommandModal } from '../CliCommandModal';
 
 interface TestSuiteRunnerProps {
   tabs: Tab[];
@@ -73,6 +75,7 @@ export function TestSuiteRunner({
   const [newSuiteDescription, setNewSuiteDescription] = useState('');
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [copiedReport, setCopiedReport] = useState(false);
+  const [showStepCliModal, setShowStepCliModal] = useState(false);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -929,6 +932,16 @@ export function TestSuiteRunner({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => setShowStepCliModal(true)}
+                    className="px-2.5 py-1.5 rounded-lg bg-[#182030] hover:bg-slate-850 text-slate-300 hover:text-emerald-400 border border-slate-750 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs"
+                    title="View & copy exact cURL command for this test step"
+                  >
+                    <Terminal size={12} className="text-emerald-400" />
+                    <span>CLI cURL</span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => handleRunSingleStep(selectedStep)}
                     disabled={isRunning}
                     className="px-3 py-1.5 rounded-lg bg-cyan-600/90 hover:bg-cyan-500 text-white text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm disabled:opacity-50"
@@ -1645,6 +1658,40 @@ export function TestSuiteRunner({
             </div>
           </motion.div>
         </div>
+      )}
+
+      {/* CLI Command Modal for Test Suite Step */}
+      {selectedStep && (
+        <CliCommandModal
+          isOpen={showStepCliModal}
+          onClose={() => setShowStepCliModal(false)}
+          commandType="curl"
+          title={`cURL Inspector: ${selectedStep.name}`}
+          singleLineCommand={(() => {
+            const resolvedUrl = resolveTemplate(selectedStep.url);
+            const headers = selectedStep.headers || {};
+            const headerFlags = Object.entries(headers)
+              .map(([k, v]) => `-H "${k}: ${resolveTemplate(String(v))}"`)
+              .join(' ');
+            const resolvedBody = selectedStep.body ? resolveTemplate(selectedStep.body) : '';
+            const bodyFlag = resolvedBody ? `-d '${resolvedBody.replace(/'/g, "'\\''")}'` : '';
+            return `curl -i -X ${selectedStep.method} "${resolvedUrl}" ${headerFlags} ${bodyFlag}`.replace(/\s+/g, ' ').trim();
+          })()}
+          multilineCommand={(() => {
+            const resolvedUrl = resolveTemplate(selectedStep.url);
+            const headers = selectedStep.headers || {};
+            const headerFlags = Object.entries(headers)
+              .map(([k, v]) => `-H "${k}: ${resolveTemplate(String(v))}"`)
+              .join(' \\\n  ');
+            const resolvedBody = selectedStep.body ? resolveTemplate(selectedStep.body) : '';
+            const bodyFlag = resolvedBody ? `-d '${resolvedBody.replace(/'/g, "'\\''")}'` : '';
+            return `curl -i -X ${selectedStep.method} "${resolvedUrl}"${headerFlags ? ` \\\n  ${headerFlags}` : ''}${bodyFlag ? ` \\\n  ${bodyFlag}` : ''}`;
+          })()}
+          method={selectedStep.method}
+          url={resolveTemplate(selectedStep.url)}
+          headers={selectedStep.headers}
+          body={selectedStep.body ? resolveTemplate(selectedStep.body) : undefined}
+        />
       )}
     </div>
   );

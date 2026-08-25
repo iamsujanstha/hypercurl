@@ -8,6 +8,7 @@ import { RequestRunner, BatchConfig, getRandomRegionIp } from "./src/server/modu
 import { Store } from "./src/server/modules/store";
 import { AutocannonEngine, AutocannonConfig } from "./src/server/modules/autocannon-engine";
 import { SystemMetrics } from "./src/server/modules/system-metrics";
+import { SecurityGuard } from "./src/server/modules/security";
 
 async function startServer() {
   await Store.init();
@@ -45,6 +46,16 @@ async function startServer() {
     }
   });
 
+  app.delete("/api/history", async (req, res) => {
+    try {
+      await Store.clearHistory();
+      res.json({ success: true, message: "History cleared." });
+    } catch (error: any) {
+      console.error("Error clearing history:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/collections", async (req, res) => {
     try {
       const collections = await Store.getCollections();
@@ -65,9 +76,29 @@ async function startServer() {
     }
   });
 
+  app.delete("/api/collections/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await Store.deleteCollection(id);
+      res.json({ success: true, message: `Collection ${id} removed.` });
+    } catch (error: any) {
+      console.error("Error deleting collection:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Autocannon Benchmark REST API Routes
   app.post("/api/autocannon/run", async (req, res) => {
     try {
+      const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "127.0.0.1";
+      if (!SecurityGuard.checkRateLimit(clientIp)) {
+        res.status(429).json({ 
+          error: "Rate Limit Exceeded", 
+          message: "Too many benchmark requests. Please wait a moment before starting another load test." 
+        });
+        return;
+      }
+
       const config: AutocannonConfig = req.body;
       if (!config || !config.url) {
         res.status(400).json({ error: "Missing required 'url' property in request body." });

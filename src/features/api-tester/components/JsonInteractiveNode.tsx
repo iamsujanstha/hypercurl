@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { Copy, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface JsonInteractiveNodeProps {
   key?: React.Key;
@@ -25,6 +27,8 @@ export function JsonInteractiveNode({
     return defaultCollapsed;
   });
 
+  const [copied, setCopied] = useState(false);
+
   // When forceExpandAll changes (e.g. user clicks Expand All / Collapse All), update state
   useEffect(() => {
     if (forceExpandAll === true) {
@@ -38,17 +42,54 @@ export function JsonInteractiveNode({
     }
   }, [forceExpandAll, depth]);
 
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    let textToCopy = '';
+    if (typeof val === 'object' && val !== null) {
+      try {
+        textToCopy = JSON.stringify(val, null, 2);
+      } catch {
+        textToCopy = String(val);
+      }
+    } else if (typeof val === 'string') {
+      textToCopy = val;
+    } else {
+      textToCopy = String(val);
+    }
+    navigator.clipboard.writeText(textToCopy);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1400);
+  };
+
+  const renderCopyButton = (titleText: string) => (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className={cn(
+        "json-copy-btn opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all px-2 py-0.5 rounded text-[10px] font-mono flex items-center gap-1 cursor-pointer border select-none shrink-0 ml-2 shadow-xs",
+        copied 
+          ? "bg-emerald-950/90 text-emerald-300 border-emerald-700 opacity-100" 
+          : "bg-[#141C2B] hover:bg-slate-800 text-slate-300 hover:text-white border-slate-750"
+      )}
+      title={titleText}
+    >
+      {copied ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
+      <span className="text-[10px] font-sans font-medium">{copied ? 'Copied' : 'Copy'}</span>
+    </button>
+  );
+
   // NULL
   if (val === null) {
     return (
-      <div className="flex items-center py-[2.5px] select-text font-mono text-[13px] leading-relaxed group">
+      <div className="flex items-center py-[2.5px] select-text font-mono text-[13px] leading-relaxed group json-node-row hover:bg-slate-800/30 rounded px-1">
         <span className="w-5 shrink-0 inline-block" />
         {label && <span className="text-[#60a5fa] json-node-key whitespace-nowrap shrink-0">"{label}"</span>}
         {label && <span className="text-slate-400 json-node-punct mx-2 shrink-0">:</span>}
-        <div className="text-slate-400 json-node-null font-semibold italic break-all">
+        <div className="text-slate-400 json-node-null font-normal italic break-all flex items-center">
           null
           {!isLast && <span className="text-slate-400 json-node-punct font-normal not-italic">,</span>}
         </div>
+        {renderCopyButton(label ? `Copy "${label}" value` : 'Copy value')}
       </div>
     );
   }
@@ -58,14 +99,15 @@ export function JsonInteractiveNode({
   // STRING
   if (type === 'string') {
     return (
-      <div className="flex items-center py-[2.5px] select-text font-mono text-[13px] leading-relaxed group">
+      <div className="flex items-center py-[2.5px] select-text font-mono text-[13px] leading-relaxed group json-node-row hover:bg-slate-800/30 rounded px-1">
         <span className="w-5 shrink-0 inline-block" />
         {label && <span className="text-[#60a5fa] json-node-key whitespace-nowrap shrink-0">"{label}"</span>}
         {label && <span className="text-slate-400 json-node-punct mx-2 shrink-0">:</span>}
-        <div className="text-[#34d399] json-node-string break-all">
+        <div className="text-[#34d399] json-node-string font-normal break-all flex items-center">
           "{val}"
-          {!isLast && <span className="text-slate-400 json-node-punct">,</span>}
+          {!isLast && <span className="text-slate-400 json-node-punct font-normal">,</span>}
         </div>
+        {renderCopyButton(label ? `Copy "${label}" value` : 'Copy string')}
       </div>
     );
   }
@@ -73,14 +115,15 @@ export function JsonInteractiveNode({
   // NUMBER
   if (type === 'number') {
     return (
-      <div className="flex items-center py-[2.5px] select-text font-mono text-[13px] leading-relaxed group">
+      <div className="flex items-center py-[2.5px] select-text font-mono text-[13px] leading-relaxed group json-node-row hover:bg-slate-800/30 rounded px-1">
         <span className="w-5 shrink-0 inline-block" />
         {label && <span className="text-[#60a5fa] json-node-key whitespace-nowrap shrink-0">"{label}"</span>}
         {label && <span className="text-slate-400 json-node-punct mx-2 shrink-0">:</span>}
-        <div className="text-[#fbbf24] json-node-number font-semibold break-all">
+        <div className="text-[#fbbf24] json-node-number font-normal break-all flex items-center">
           {val}
           {!isLast && <span className="text-slate-400 json-node-punct font-normal">,</span>}
         </div>
+        {renderCopyButton(label ? `Copy "${label}" value` : 'Copy number')}
       </div>
     );
   }
@@ -88,14 +131,15 @@ export function JsonInteractiveNode({
   // BOOLEAN
   if (type === 'boolean') {
     return (
-      <div className="flex items-center py-[2.5px] select-text font-mono text-[13px] leading-relaxed group">
+      <div className="flex items-center py-[2.5px] select-text font-mono text-[13px] leading-relaxed group json-node-row hover:bg-slate-800/30 rounded px-1">
         <span className="w-5 shrink-0 inline-block" />
         {label && <span className="text-[#60a5fa] json-node-key whitespace-nowrap shrink-0">"{label}"</span>}
         {label && <span className="text-slate-400 json-node-punct mx-2 shrink-0">:</span>}
-        <div className="text-violet-400 json-node-boolean font-bold break-all">
+        <div className="text-violet-400 json-node-boolean font-normal break-all flex items-center">
           {val.toString()}
           {!isLast && <span className="text-slate-400 json-node-punct font-normal">,</span>}
         </div>
+        {renderCopyButton(label ? `Copy "${label}" value` : 'Copy boolean')}
       </div>
     );
   }
@@ -107,14 +151,15 @@ export function JsonInteractiveNode({
 
     if (itemsCount === 0) {
       return (
-        <div className="flex items-center py-[2.5px] font-mono text-[13px] leading-relaxed group">
+        <div className="flex items-center py-[2.5px] font-mono text-[13px] leading-relaxed group json-node-row hover:bg-slate-800/30 rounded px-1">
           <span className="w-5 shrink-0 inline-block" />
           {label && <span className="text-[#60a5fa] json-node-key whitespace-nowrap shrink-0">"{label}"</span>}
           {label && <span className="text-slate-400 json-node-punct mx-2 shrink-0">:</span>}
-          <div className="text-slate-400 json-node-punct break-all">
+          <div className="text-slate-400 json-node-punct break-all flex items-center">
             []
             {!isLast && <span className="text-slate-400 json-node-punct">,</span>}
           </div>
+          {renderCopyButton(label ? `Copy "${label}" array` : 'Copy empty array')}
         </div>
       );
     }
@@ -122,26 +167,27 @@ export function JsonInteractiveNode({
     return (
       <div className="font-mono text-[13px] leading-relaxed select-text">
         <div 
-          className="flex items-center cursor-pointer select-none hover:bg-slate-800/40 rounded px-0.5 transition-colors py-[2.5px] group"
+          className="flex items-center cursor-pointer select-none hover:bg-slate-800/40 rounded px-1 transition-colors py-[2.5px] group json-expandable-header"
           onClick={(e) => { e.stopPropagation(); setCollapsed(!collapsed); }}
         >
-          <span className="text-slate-400 hover:text-cyan-400 text-[10px] w-5 text-center inline-block shrink-0 transition-transform font-sans font-bold select-none">
+          <span className="text-slate-400 hover:text-cyan-400 text-[10px] w-5 text-center inline-block shrink-0 transition-transform font-sans font-bold select-none json-node-arrow">
             {collapsed ? '▶' : '▼'}
           </span>
           {label && <span className="text-[#60a5fa] json-node-key whitespace-nowrap shrink-0">"{label}"</span>}
           {label && <span className="text-slate-400 json-node-punct mx-2 shrink-0">:</span>}
           {collapsed ? (
-            <div className="text-slate-300 break-all flex items-center gap-2">
-              <span className="text-slate-400 json-node-punct font-semibold">[...]</span>
-              <span className="text-slate-400 text-[12px] italic font-sans whitespace-nowrap">{itemsText}</span>
+            <div className="text-slate-300 break-all flex items-center gap-2 font-normal">
+              <span className="text-slate-400 json-node-punct font-normal">[...]</span>
+              <span className="text-slate-400 json-node-meta text-[12px] italic font-sans whitespace-nowrap font-normal">{itemsText}</span>
               {!isLast && <span className="text-slate-400 json-node-punct font-normal font-mono not-italic">,</span>}
             </div>
           ) : (
-            <div className="text-slate-300 break-all flex items-center gap-2">
-              <span className="text-slate-300 json-node-punct font-semibold">[</span>
-              <span className="text-slate-400 text-[12px] italic font-sans whitespace-nowrap">{itemsText}</span>
+            <div className="text-slate-300 break-all flex items-center gap-2 font-normal">
+              <span className="text-slate-300 json-node-punct font-normal">[</span>
+              <span className="text-slate-400 json-node-meta text-[12px] italic font-sans whitespace-nowrap font-normal">{itemsText}</span>
             </div>
           )}
+          {renderCopyButton(label ? `Copy "${label}" array (${itemsText})` : `Copy array (${itemsText})`)}
         </div>
         
         {!collapsed && (
@@ -153,16 +199,16 @@ export function JsonInteractiveNode({
                 isLast={idx === itemsCount - 1} 
                 depth={depth + 1}
                 defaultCollapsed={defaultCollapsed}
-                forceExpandAll={forceExpandAll}
+                forceExpandAll={forceExpandAll} 
               />
             ))}
           </div>
         )}
         
         {!collapsed && (
-          <div className="text-slate-300 json-node-punct py-[2px] flex items-center">
-            <span className="w-5 shrink-0 inline-block text-center font-bold">]</span>
-            {!isLast && <span className="text-slate-400 json-node-punct">,</span>}
+          <div className="text-slate-300 json-node-punct py-[2px] flex items-center px-1 font-normal">
+            <span className="w-5 shrink-0 inline-block text-center font-normal">]</span>
+            {!isLast && <span className="text-slate-400 json-node-punct font-normal">,</span>}
           </div>
         )}
       </div>
@@ -177,14 +223,15 @@ export function JsonInteractiveNode({
 
     if (itemsCount === 0) {
       return (
-        <div className="flex items-center py-[2.5px] font-mono text-[13px] leading-relaxed group">
+        <div className="flex items-center py-[2.5px] font-mono text-[13px] leading-relaxed group json-node-row hover:bg-slate-800/30 rounded px-1">
           <span className="w-5 shrink-0 inline-block" />
           {label && <span className="text-[#60a5fa] json-node-key whitespace-nowrap shrink-0">"{label}"</span>}
           {label && <span className="text-slate-400 json-node-punct mx-2 shrink-0">:</span>}
-          <div className="text-slate-400 json-node-punct break-all">
+          <div className="text-slate-400 json-node-punct break-all flex items-center font-normal">
             {"{}"}
-            {!isLast && <span className="text-slate-400 json-node-punct">,</span>}
+            {!isLast && <span className="text-slate-400 json-node-punct font-normal">,</span>}
           </div>
+          {renderCopyButton(label ? `Copy "${label}" object` : 'Copy empty object')}
         </div>
       );
     }
@@ -192,26 +239,27 @@ export function JsonInteractiveNode({
     return (
       <div className="font-mono text-[13px] leading-relaxed select-text">
         <div 
-          className="flex items-center cursor-pointer select-none hover:bg-slate-800/40 rounded px-0.5 transition-colors py-[2.5px] group"
+          className="flex items-center cursor-pointer select-none hover:bg-slate-800/40 rounded px-1 transition-colors py-[2.5px] group json-expandable-header"
           onClick={(e) => { e.stopPropagation(); setCollapsed(!collapsed); }}
         >
-          <span className="text-slate-400 hover:text-cyan-400 text-[10px] w-5 text-center inline-block shrink-0 transition-transform font-sans font-bold select-none">
+          <span className="text-slate-400 hover:text-cyan-400 text-[10px] w-5 text-center inline-block shrink-0 transition-transform font-sans font-bold select-none json-node-arrow">
             {collapsed ? '▶' : '▼'}
           </span>
           {label && <span className="text-[#60a5fa] json-node-key whitespace-nowrap shrink-0">"{label}"</span>}
           {label && <span className="text-slate-400 json-node-punct mx-2 shrink-0">:</span>}
           {collapsed ? (
-            <div className="text-slate-300 break-all flex items-center gap-2">
-              <span className="text-slate-400 json-node-punct font-semibold">{"{...}"}</span>
-              <span className="text-slate-400 text-[12px] italic font-sans whitespace-nowrap">{itemsText}</span>
+            <div className="text-slate-300 break-all flex items-center gap-2 font-normal">
+              <span className="text-slate-400 json-node-punct font-normal">{"{...}"}</span>
+              <span className="text-slate-400 json-node-meta text-[12px] italic font-sans whitespace-nowrap font-normal">{itemsText}</span>
               {!isLast && <span className="text-slate-400 json-node-punct font-normal font-mono not-italic">,</span>}
             </div>
           ) : (
-            <div className="text-slate-300 break-all flex items-center gap-2">
-              <span className="text-slate-300 json-node-punct font-semibold">{"{"}</span>
-              <span className="text-slate-400 text-[12px] italic font-sans whitespace-nowrap">{itemsText}</span>
+            <div className="text-slate-300 break-all flex items-center gap-2 font-normal">
+              <span className="text-slate-300 json-node-punct font-normal">{"{"}</span>
+              <span className="text-slate-400 json-node-meta text-[12px] italic font-sans whitespace-nowrap font-normal">{itemsText}</span>
             </div>
           )}
+          {renderCopyButton(label ? `Copy "${label}" object (${itemsText})` : `Copy object (${itemsText})`)}
         </div>
         
         {!collapsed && (
@@ -224,14 +272,14 @@ export function JsonInteractiveNode({
                 isLast={idx === itemsCount - 1} 
                 depth={depth + 1}
                 defaultCollapsed={defaultCollapsed}
-                forceExpandAll={forceExpandAll}
+                forceExpandAll={forceExpandAll} 
               />
             ))}
           </div>
         )}
         
         {!collapsed && (
-          <div className="text-slate-300 json-node-punct py-[2px] flex items-center">
+          <div className="text-slate-300 json-node-punct py-[2px] flex items-center px-1">
             <span className="w-5 shrink-0 inline-block text-center font-bold">{"}"}</span>
             {!isLast && <span className="text-slate-400 json-node-punct">,</span>}
           </div>
@@ -242,14 +290,15 @@ export function JsonInteractiveNode({
 
   // FALLBACK
   return (
-    <div className="flex items-center py-[2.5px] font-mono text-[13px] leading-relaxed group">
+    <div className="flex items-center py-[2.5px] font-mono text-[13px] leading-relaxed group json-node-row hover:bg-slate-800/30 rounded px-1">
       <span className="w-5 shrink-0 inline-block" />
       {label && <span className="text-[#60a5fa] json-node-key whitespace-nowrap shrink-0">"{label}"</span>}
       {label && <span className="text-slate-400 json-node-punct mx-2 shrink-0">:</span>}
-      <div className="text-slate-400 json-node-punct break-all">
+      <div className="text-slate-400 json-node-punct break-all flex items-center">
         {String(val)}
         {!isLast && <span className="text-slate-400 json-node-punct">,</span>}
       </div>
+      {renderCopyButton(label ? `Copy "${label}" value` : 'Copy value')}
     </div>
   );
 }
