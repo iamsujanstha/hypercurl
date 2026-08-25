@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CurlResult } from '@/server/modules/curl-engine';
-import { JsonPretty } from './JsonPretty';
+import { JsonInteractiveNode } from './JsonInteractiveNode';
 
 export type ResponseViewMode = 'body' | 'raw' | 'headers' | 'terminal';
 
@@ -47,6 +47,7 @@ export function ResponseViewer({
   const [wrapText, setWrapText] = useState(true);
   const [searchFilter, setSearchFilter] = useState('');
   const [showRequestHeaders, setShowRequestHeaders] = useState(false);
+  const [forceExpandAll, setForceExpandAll] = useState<boolean | null>(null);
 
   // Parse body as JSON if possible
   const parsedJson = useMemo(() => {
@@ -356,10 +357,45 @@ export function ResponseViewer({
         
         {/* VIEW 1: FORMATTED JSON / SYNTAX HIGHLIGHTED BODY */}
         {viewMode === 'body' && (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {parsedJson !== null ? (
-              <div className="bg-[#0B0E17] border border-slate-850 rounded-xl p-4 overflow-x-auto shadow-inner text-xs leading-relaxed">
-                <JsonPretty data={parsedJson} />
+              <div className="bg-[#0B0E17] border border-slate-850 rounded-xl overflow-hidden shadow-inner">
+                <div className="bg-[#0e121c] border-b border-slate-850 px-3 py-1.5 flex items-center justify-between text-[11px] text-slate-400 select-none">
+                  <div className="flex items-center gap-2 font-mono text-[10.5px]">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+                    <span className="text-slate-300 font-semibold">JSON TREE</span>
+                    <span className="text-slate-500">•</span>
+                    <span className="text-slate-500">
+                      {Array.isArray(parsedJson) ? `${parsedJson.length} items` : typeof parsedJson === 'object' && parsedJson !== null ? `${Object.keys(parsedJson).length} keys` : 'value'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setForceExpandAll(false)}
+                      className="px-2 py-0.5 rounded text-[10px] font-mono text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                      title="Collapse all child nodes"
+                    >
+                      ▶ Collapse All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForceExpandAll(true)}
+                      className="px-2 py-0.5 rounded text-[10px] font-mono text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                      title="Expand all nodes"
+                    >
+                      ▼ Expand All
+                    </button>
+                  </div>
+                </div>
+                <div className="p-3.5 overflow-x-auto">
+                  <JsonInteractiveNode 
+                    val={parsedJson} 
+                    depth={0} 
+                    defaultCollapsed={true} 
+                    forceExpandAll={forceExpandAll} 
+                  />
+                </div>
               </div>
             ) : (
               <div className="bg-[#0B0E17] border border-slate-850 rounded-xl p-4 overflow-x-auto shadow-inner text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">

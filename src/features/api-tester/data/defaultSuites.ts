@@ -115,100 +115,88 @@ export const DEFAULT_TEST_SUITES: TestSuite[] = [
     ]
   },
   {
-    id: 'suite-order-atomic',
-    name: 'Transactional Balance & Order Flow',
-    description: 'Tests ledger balance query, order placement execution, and remaining funds verification.',
+    id: 'suite-autocannon-integration',
+    name: 'Autocannon Benchmark REST Engine',
+    description: 'Validates automated programmatic invocation of the Autocannon engine and audit logging verification.',
     category: 'regression',
     stopOnFailure: true,
     steps: [
       {
-        id: 'step-reset-demo',
-        name: '1. Reset Balance State',
+        id: 'step-run-benchmark',
+        name: '1. Execute Programmatic Benchmark',
         method: 'POST',
-        url: 'http://localhost:3000/api/race-demo/reset',
+        url: 'http://localhost:3000/api/autocannon/run',
         headersList: [
           { id: 'h6', key: 'Content-Type', value: 'application/json', enabled: true }
         ],
-        bodyType: 'none',
+        bodyType: 'json',
+        body: JSON.stringify({
+          url: 'http://localhost:3000/api/health',
+          connections: 10,
+          duration: 2,
+          pipelining: 1
+        }, null, 2),
         assertions: [
           { id: 'a15', type: 'status', value: '200' },
-          { id: 'a16', type: 'json_path', extra: 'status', value: 'system_reset' }
+          { id: 'a16', type: 'json_path', extra: 'duration', value: '*' }
         ],
         extractors: [
-          { id: 'e2', jsonPath: 'balance', variableName: 'initialBalance' }
+          { id: 'e2', jsonPath: 'totalRequests', variableName: 'benchmarkTotalRequests' }
         ]
       },
       {
-        id: 'step-place-order',
-        name: '2. Execute Order Transaction',
-        method: 'POST',
-        url: 'http://localhost:3000/api/orders/fixed/place',
-        headersList: [
-          { id: 'h7', key: 'Content-Type', value: 'application/json', enabled: true }
-        ],
-        bodyType: 'json',
-        body: JSON.stringify({ amount: 50 }, null, 2),
-        assertions: [
-          { id: 'a17', type: 'status', value: '200' },
-          { id: 'a18', type: 'json_path', extra: 'success', value: 'true' },
-          { id: 'a19', type: 'json_path', extra: 'amount', value: '50' }
-        ],
-        extractors: [
-          { id: 'e3', jsonPath: 'remaining', variableName: 'remainingBalance' }
-        ]
-      },
-      {
-        id: 'step-verify-balance',
-        name: '3. Verify Updated Balance',
+        id: 'step-verify-audit',
+        name: '2. Verify Audit History Logged',
         method: 'GET',
-        url: 'http://localhost:3000/api/race-demo/balance',
+        url: 'http://localhost:3000/api/history',
         headersList: [
-          { id: 'h8', key: 'Accept', value: 'application/json', enabled: true }
+          { id: 'h7', key: 'Accept', value: 'application/json', enabled: true }
         ],
         bodyType: 'none',
         assertions: [
-          { id: 'a20', type: 'status', value: '200' },
-          { id: 'a21', type: 'json_path', extra: 'balance', value: '950' }
+          { id: 'a17', type: 'status', value: '200' },
+          { id: 'a18', type: 'header_matches', extra: 'content-type', value: 'application/json' }
         ],
         extractors: []
       }
     ]
   },
   {
-    id: 'suite-rate-limiting-sla',
-    name: 'Rate Limiting & SLA Thresholds',
-    description: 'Validates rate limit responses, client IP proxy headers, and latency bounds under rapid invocation.',
-    category: 'sla',
-    stopOnFailure: false,
+    id: 'suite-public-api-chaining',
+    name: 'End-to-End Dynamic Variable Chaining',
+    description: 'Demonstrates real-world sequential API testing by fetching an initial record and chaining extracted identifiers.',
+    category: 'e2e',
+    stopOnFailure: true,
     steps: [
       {
-        id: 'step-rate-limit-1',
-        name: '1. Rate Limit Probe (Pass)',
+        id: 'step-fetch-todo',
+        name: '1. Fetch Primary Todo Record',
         method: 'GET',
-        url: 'http://localhost:3000/api/demo/rate-limited',
+        url: 'https://jsonplaceholder.typicode.com/todos/1',
         headersList: [
           { id: 'h9', key: 'Accept', value: 'application/json', enabled: true }
         ],
         bodyType: 'none',
         assertions: [
           { id: 'a22', type: 'status', value: '200' },
-          { id: 'a23', type: 'latency', value: '150' },
-          { id: 'a24', type: 'json_path', extra: 'success', value: 'true' }
+          { id: 'a23', type: 'json_path', extra: 'id', value: '1' }
         ],
-        extractors: []
+        extractors: [
+          { id: 'e4', jsonPath: 'userId', variableName: 'linkedUserId' }
+        ]
       },
       {
-        id: 'step-health-sla',
-        name: '2. SLA Latency Strict Gate (< 100ms)',
+        id: 'step-fetch-user',
+        name: '2. Fetch Chained User Profile ({{linkedUserId}})',
         method: 'GET',
-        url: 'http://localhost:3000/api/health',
+        url: 'https://jsonplaceholder.typicode.com/users/{{linkedUserId}}',
         headersList: [
           { id: 'h10', key: 'Accept', value: 'application/json', enabled: true }
         ],
         bodyType: 'none',
         assertions: [
           { id: 'a25', type: 'status', value: '200' },
-          { id: 'a26', type: 'latency', value: '100' }
+          { id: 'a26', type: 'latency', value: '1500' }
         ],
         extractors: []
       }

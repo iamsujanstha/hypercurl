@@ -164,7 +164,7 @@ export interface TestSuite {
   id: string;
   name: string;
   description: string;
-  category: 'smoke' | 'auth' | 'crud' | 'regression' | 'sla' | 'custom';
+  category: 'smoke' | 'auth' | 'crud' | 'regression' | 'sla' | 'e2e' | 'custom';
   steps: TestSuiteStep[];
   stopOnFailure?: boolean;
 }

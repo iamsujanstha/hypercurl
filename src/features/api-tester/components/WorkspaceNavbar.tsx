@@ -65,14 +65,6 @@ export function WorkspaceNavbar({
       </div>
       
       <div className="flex items-center gap-1.5 sm:gap-3">
-        {/* Real Native Engine Status Badge */}
-        <div className="flex items-center gap-2 px-2.5 py-1 bg-[#12161E]/85 border border-slate-800/60 rounded shadow-sm">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-            <span className="hidden md:inline">ENGINES:</span> cURL & Autocannon <span className="text-slate-500 font-normal">[{telemetry.status || 'ONLINE'}]</span>
-          </span>
-        </div>
-
         {/* Global Theme Toggle Switcher */}
         <button
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}

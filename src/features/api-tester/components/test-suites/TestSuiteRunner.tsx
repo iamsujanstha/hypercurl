@@ -34,7 +34,13 @@ export function TestSuiteRunner({
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // If the cached version contains the old gimmick tests, refresh with DEFAULT_TEST_SUITES
+          const hasGimmicks = parsed.some((s: any) => 
+            s.id === 'suite-order-atomic' || s.id === 'suite-rate-limiting-sla' || s.steps?.some((st: any) => st.url?.includes('race-demo') || st.url?.includes('orders/broken') || st.url?.includes('demo/rate-limited'))
+          );
+          if (!hasGimmicks) return parsed;
+        }
       } catch (e) {}
     }
     return DEFAULT_TEST_SUITES;
@@ -631,6 +637,21 @@ export function TestSuiteRunner({
             <Sparkles size={14} className="text-emerald-400" />
             <span className="hidden md:inline">IMPORT_TABS</span>
           </button>
+
+          {/* Reset to Standard Defaults */}
+          <button
+            type="button"
+            onClick={() => {
+              setSuites(DEFAULT_TEST_SUITES);
+              setActiveSuiteId(DEFAULT_TEST_SUITES[0].id);
+              setSuiteRunResult(null);
+            }}
+            className="p-1.5 rounded-lg bg-[#141822] hover:bg-slate-800 text-slate-400 hover:text-cyan-300 border border-slate-750 transition-all cursor-pointer text-xs flex items-center gap-1 font-mono"
+            title="Reset test suites to clean default production suites"
+          >
+            <RefreshCw size={13} />
+            <span className="hidden lg:inline">RESET_DEFAULTS</span>
+          </button>
         </div>
 
         {/* Right: Suite Execution Controls */}
@@ -804,45 +825,46 @@ export function TestSuiteRunner({
                       <span className="text-xs font-mono font-bold text-slate-200 truncate">{step.name}</span>
                     </div>
 
-                    {/* Step Result Status Indicator */}
+                      {/* Step Result Status Indicator */}
                     <div className="flex items-center gap-1.5 shrink-0">
                       {isCurrentlyExecuting ? (
-                        <span className="flex items-center gap-1 text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/60 animate-pulse">
+                        <span className="flex items-center gap-1.5 text-[10px] font-mono font-bold text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded-md border border-cyan-800/60 animate-pulse shadow-xs">
                           <RefreshCw size={10} className="animate-spin" /> RUNNING
                         </span>
                       ) : result?.status === 'passed' ? (
-                        <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40">
-                          <CheckCircle2 size={11} /> {result.durationMs}ms
+                        <span className="flex items-center gap-1.5 text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-800/40 shadow-xs">
+                          <CheckCircle2 size={11} className="text-emerald-400" /> {result.durationMs}ms
                         </span>
                       ) : result?.status === 'failed' ? (
-                        <span className="flex items-center gap-1 text-[10px] font-mono text-rose-400 bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-800/40">
-                          <XCircle size={11} /> FAIL
+                        <span className="flex items-center gap-1.5 text-[10px] font-mono font-bold text-rose-400 bg-rose-950/60 px-2 py-0.5 rounded-md border border-rose-800/40 shadow-xs">
+                          <XCircle size={11} className="text-rose-400" /> FAIL
                         </span>
                       ) : (
-                        <span className="text-[10px] font-mono text-slate-600 bg-slate-850 px-1.5 py-0.5 rounded">
-                          PENDING
+                        <span className="flex items-center gap-1.5 text-[10px] font-mono font-bold text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700/70 shadow-xs suite-pending-badge">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400" /> PENDING
                         </span>
                       )}
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 pl-6 gap-2">
-                    <span className="truncate text-slate-400">{step.url}</span>
+                    <span className="truncate text-slate-400 font-normal">{step.url}</span>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] text-cyan-400/80 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-900/30">
+                      <span className="text-[10px] font-mono font-medium text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-900/30">
                         {step.assertions.length} assertions
                       </span>
                       
                       {/* Action buttons on hover */}
-                      <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                      <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 flex items-center gap-1 transition-all duration-150">
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleRunSingleStep(step);
                           }}
-                          className="p-1 rounded bg-slate-800 hover:bg-cyan-600 text-slate-300 hover:text-white cursor-pointer"
+                          className="p-1.5 rounded-md bg-slate-800 hover:bg-cyan-600 text-slate-300 hover:text-white border border-slate-700/60 hover:border-cyan-500 cursor-pointer shadow-xs transition-colors"
                           title="Run only this step"
+                          aria-label={`Run step ${step.name}`}
                         >
                           <Play size={11} fill="currentColor" />
                         </button>
@@ -852,8 +874,9 @@ export function TestSuiteRunner({
                             e.stopPropagation();
                             setIsEditingStep(step);
                           }}
-                          className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer"
+                          className="p-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 cursor-pointer shadow-xs transition-colors"
                           title="Edit step configuration & assertions"
+                          aria-label={`Edit step ${step.name}`}
                         >
                           <Edit3 size={11} />
                         </button>
@@ -864,8 +887,9 @@ export function TestSuiteRunner({
                               e.stopPropagation();
                               handleDeleteStep(step.id);
                             }}
-                            className="p-1 rounded bg-slate-800 hover:bg-rose-600 text-slate-400 hover:text-white cursor-pointer"
+                            className="p-1.5 rounded-md bg-slate-800 hover:bg-rose-600 text-slate-400 hover:text-white border border-slate-700/60 hover:border-rose-500 cursor-pointer shadow-xs transition-colors"
                             title="Delete step"
+                            aria-label={`Delete step ${step.name}`}
                           >
                             <Trash2 size={11} />
                           </button>
@@ -1047,42 +1071,49 @@ export function TestSuiteRunner({
                             <div 
                               key={rule.id || idx}
                               className={cn(
-                                "p-3 rounded-lg border transition-all font-mono flex flex-col gap-1.5",
+                                "p-3 rounded-lg border transition-all font-mono flex flex-col gap-2 suite-assertion-card shadow-xs",
                                 evalRes?.passed === true ? "bg-emerald-950/20 border-emerald-800/40 text-emerald-200" :
                                 evalRes?.passed === false ? "bg-rose-950/20 border-rose-800/40 text-rose-200" :
-                                "bg-[#121620] border-slate-800 text-slate-300"
+                                "bg-[#121620] border-slate-800/90 text-slate-200"
                               )}
                             >
-                              <div className="flex items-center justify-between">
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
                                 <div className="flex items-center gap-2">
                                   {evalRes?.passed === true ? (
-                                    <CheckCircle2 size={16} className="text-emerald-400" />
+                                    <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
                                   ) : evalRes?.passed === false ? (
-                                    <XCircle size={16} className="text-rose-400" />
+                                    <XCircle size={16} className="text-rose-400 shrink-0" />
                                   ) : (
-                                    <Clock size={16} className="text-slate-500" />
+                                    <div className="w-4 h-4 rounded-full border border-slate-500/80 flex items-center justify-center text-slate-400 shrink-0">
+                                      <Clock size={11} />
+                                    </div>
                                   )}
-                                  <span className="text-xs font-bold uppercase tracking-wide">
+                                  <span className="text-xs font-bold uppercase tracking-wide suite-assertion-type">
                                     {rule.type.replace('_', ' ')}
                                   </span>
+                                  {!evalRes && (
+                                    <span className="text-[9.5px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700/60 font-semibold suite-pending-badge">
+                                      PENDING
+                                    </span>
+                                  )}
                                 </div>
 
-                                <span className="text-[11px] px-2 py-0.5 rounded bg-slate-900/80 border border-slate-750 text-slate-300">
-                                  EXPECTED: <span className="text-cyan-300 font-bold">{rule.value}</span>
+                                <span className="text-[11px] px-2 py-0.5 rounded bg-slate-900/80 border border-slate-750 text-slate-300 suite-expected-badge">
+                                  EXPECTED: <span className="text-cyan-400 font-bold">{rule.value}</span>
                                 </span>
                               </div>
 
                               <div className="text-xs text-slate-400 pl-6 flex flex-wrap items-center gap-4">
                                 {rule.extra && (
                                   <div>
-                                    <span className="text-slate-500">TARGET: </span>
-                                    <span className="text-slate-200">{rule.extra}</span>
+                                    <span className="text-slate-400 font-semibold">TARGET: </span>
+                                    <span className="text-slate-300 font-mono">{rule.extra}</span>
                                   </div>
                                 )}
                                 {evalRes && (
                                   <div>
-                                    <span className="text-slate-500">ACTUAL: </span>
-                                    <span className={cn("font-bold", evalRes.passed ? "text-emerald-400" : "text-rose-400")}>
+                                    <span className="text-slate-400 font-semibold">ACTUAL: </span>
+                                    <span className={cn("font-bold font-mono", evalRes.passed ? "text-emerald-400" : "text-rose-400")}>
                                       {evalRes.actual}
                                     </span>
                                   </div>

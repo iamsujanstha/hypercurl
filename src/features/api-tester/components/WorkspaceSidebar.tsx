@@ -147,21 +147,35 @@ export function WorkspaceSidebar({
                 }
               }}
               className={cn(
-                "w-full flex items-center rounded-xl text-[11px] font-bold transition-all group cursor-pointer border-none shadow-none relative",
+                "w-full flex items-center text-[11px] font-bold transition-all group cursor-pointer relative overflow-hidden rounded-xl sidebar-nav-btn focus-visible:ring-2 focus-visible:ring-cyan-500/50 outline-none",
                 isSidebarCollapsed ? "justify-center px-1.5 py-3" : "gap-3 px-3 py-2.5 text-left",
                 isActive 
-                  ? "bg-[#1E293B]/80 text-white border-l-2 border-emerald-500 rounded-l-none shadow-inner" 
-                  : "text-slate-400 hover:bg-[#1E293B]/30 hover:text-slate-200"
+                  ? "bg-[#182235] text-white border border-slate-700 shadow-md ring-1 ring-white/10 sidebar-active-btn" 
+                  : "text-slate-400 hover:bg-[#151D2A] hover:text-slate-100 border border-transparent hover:border-slate-800/80"
               )}
               title={isSidebarCollapsed ? `${item.label} (${item.sublabel})` : ""}
             >
+              {/* Active Indicator Bar */}
+              {isActive && (
+                <span className={cn(
+                  "absolute left-0 top-1 bottom-1 w-1.5 rounded-r-full shadow-sm",
+                  item.key === 'autocannon' ? "bg-amber-400 shadow-amber-400/50" :
+                  item.key === 'suites' ? "bg-cyan-400 shadow-cyan-400/50" :
+                  item.key === 'variables' ? "bg-blue-400 shadow-blue-400/50" :
+                  item.key === 'history' ? "bg-purple-400 shadow-purple-400/50" :
+                  "bg-emerald-400 shadow-emerald-400/50"
+                )} />
+              )}
+
               <div className={cn(
                 "p-1.5 rounded-lg shrink-0 transition-all",
-                isActive ? "bg-slate-900 shadow-sm" : "group-hover:bg-slate-900/60"
+                isActive 
+                  ? "bg-slate-900/90 shadow-sm border border-slate-700/60 ring-1 ring-white/5" 
+                  : "bg-slate-900/30 group-hover:bg-slate-900/70"
               )}>
                 <Icon size={16} className={cn(
                   "transition-transform shrink-0",
-                  isActive ? item.accentColor : "text-slate-400 group-hover:scale-105"
+                  isActive ? cn(item.accentColor, "scale-110 drop-shadow-sm") : "text-slate-400 group-hover:scale-105"
                 )} />
               </div>
 
@@ -170,18 +184,22 @@ export function WorkspaceSidebar({
                   <div className="flex items-center justify-between w-full gap-1.5">
                     <span className={cn(
                       "tracking-wide font-mono text-[11px] font-black truncate uppercase",
-                      isActive ? "text-slate-100" : "text-slate-300"
+                      isActive ? "text-white" : "text-slate-300"
                     )}>
                       {item.label}
                     </span>
                     <span className={cn(
-                      "text-[8px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase shrink-0",
-                      item.badgeBg
+                      "text-[8px] font-mono font-black px-1.5 py-0.5 rounded border uppercase shrink-0 shadow-xs",
+                      item.badgeBg,
+                      isActive ? "ring-1 ring-white/10" : "opacity-80"
                     )}>
                       {item.badge}
                     </span>
                   </div>
-                  <span className="text-[9.5px] font-sans text-slate-500 truncate mt-0.5 font-normal">
+                  <span className={cn(
+                    "text-[9.5px] font-sans truncate mt-0.5 font-normal",
+                    isActive ? "text-slate-300" : "text-slate-500"
+                  )}>
                     {item.sublabel}
                   </span>
                 </div>
