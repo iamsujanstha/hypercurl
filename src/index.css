@@ -437,12 +437,20 @@
   color: #7E22CE !important; /* Purple-700 */
 }
 
+.theme-light .text-amber-200,
+.theme-light .text-amber-300,
 .theme-light .text-amber-400,
 .theme-light .text-amber-405,
 .theme-light .text-amber-450,
 .theme-light .text-amber-500,
-.theme-light .text-amber-505 {
-  color: #B45309 !important; /* Amber-700 */
+.theme-light .text-amber-505,
+.theme-light .text-amber-600,
+.theme-light .text-yellow-200,
+.theme-light .text-yellow-300,
+.theme-light .text-yellow-400,
+.theme-light .text-yellow-500,
+.theme-light .text-yellow-600 {
+  color: #B45309 !important; /* Amber-700 / High Contrast Ochre */
 }
 
 .theme-light .text-rose-400,
@@ -912,6 +920,75 @@
 .theme-light .suite-expected-badge span {
   color: #0284C7 !important;
 }
+
+/* Autocannon Benchmark Completed Header & Badges in Light Mode */
+.theme-light .autocannon-completed-title {
+  color: #0F172A !important;
+}
+.theme-light .autocannon-duration-badge {
+  background-color: #F1F5F9 !important;
+  color: #334155 !important;
+  border-color: #CBD5E1 !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+}
+.theme-light .autocannon-completed-url .autocannon-url-text {
+  color: #334155 !important;
+}
+.theme-light .autocannon-result-header {
+  border-color: #E2E8F0 !important;
+}
+.theme-light .autocannon-metric-card {
+  background-color: #FFFFFF !important;
+  border-color: #E2E8F0 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05) !important;
+}
+.theme-light .autocannon-metric-card:hover {
+  background-color: #F8FAFC !important;
+  border-color: #94A3B8 !important;
+  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.08) !important;
+}
+.theme-light .autocannon-val-main {
+  color: #0F172A !important;
+}
+.theme-light .autocannon-val-amber {
+  color: #D97706 !important;
+}
+.theme-light .autocannon-val-emerald {
+  color: #059669 !important;
+}
+.theme-light .autocannon-val-rose {
+  color: #E11D48 !important;
+}
+.theme-light .autocannon-val-purple {
+  color: #7C3AED !important;
+}
+.theme-light .batch-progress-count {
+  color: #0F172A !important;
+}
+
+/* CLI Terminal Command Box & Code in Light Mode */
+.theme-light .cli-terminal-container {
+  background-color: #F8FAFC !important;
+  border-color: #CBD5E1 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.06) !important;
+}
+.theme-light .cli-terminal-topbar {
+  background-color: #F1F5F9 !important;
+  border-color: #E2E8F0 !important;
+}
+.theme-light .cli-terminal-label {
+  color: #475569 !important;
+}
+.theme-light .cli-terminal-code {
+  color: #92400E !important; /* Deep contrast Amber-800 - crisp and readable on light backgrounds */
+  background-color: #F8FAFC !important;
+}
+.theme-light .border-amber-400,
+.theme-light .border-amber-500 {
+  border-color: #D97706 !important;
+}
+
+
 
 
 

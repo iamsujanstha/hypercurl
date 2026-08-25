@@ -86,7 +86,7 @@ export function BatchViewer({
           <div className="space-y-2">
             <div className="flex justify-between items-end">
               <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                PROGRESS <span className="text-white ml-2 font-mono">{progress ? progress.completed : results.length} / {progress ? progress.total : results.length}</span>
+                PROGRESS <span className="text-slate-100 dark:text-white ml-2 font-mono batch-progress-count">{progress ? progress.completed : results.length} / {progress ? progress.total : results.length}</span>
               </div>
               <div className="text-xs font-black text-emerald-500 font-mono">
                 {progress && progress.total > 0 ? ((progress.completed / progress.total) * 100).toFixed(1) : (results.length > 0 ? '100.0' : '0.0')}%

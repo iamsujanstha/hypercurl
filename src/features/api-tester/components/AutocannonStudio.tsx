@@ -571,7 +571,7 @@ export function AutocannonStudio({
                     className={cn(
                       "px-3 py-2 border-b-2 cursor-pointer transition-all flex items-center gap-1.5",
                       activeSubTab === 'headers' 
-                        ? "border-amber-400 text-amber-400 font-black" 
+                        ? "border-amber-500 dark:border-amber-400 text-amber-600 dark:text-amber-400 font-black" 
                         : "border-transparent text-slate-400 hover:text-slate-200"
                     )}
                   >
@@ -583,7 +583,7 @@ export function AutocannonStudio({
                     className={cn(
                       "px-3 py-2 border-b-2 cursor-pointer transition-all flex items-center gap-1.5",
                       activeSubTab === 'body' 
-                        ? "border-amber-400 text-amber-400 font-black" 
+                        ? "border-amber-500 dark:border-amber-400 text-amber-600 dark:text-amber-400 font-black" 
                         : "border-transparent text-slate-400 hover:text-slate-200"
                     )}
                   >
@@ -595,7 +595,7 @@ export function AutocannonStudio({
                     className={cn(
                       "px-3 py-2 border-b-2 cursor-pointer transition-all flex items-center gap-1.5",
                       activeSubTab === 'cli' 
-                        ? "border-amber-400 text-amber-400 font-black" 
+                        ? "border-amber-500 dark:border-amber-400 text-amber-600 dark:text-amber-400 font-black" 
                         : "border-transparent text-slate-400 hover:text-slate-200"
                     )}
                   >
@@ -643,7 +643,7 @@ export function AutocannonStudio({
                       <button
                         type="button"
                         onClick={() => setHeadersList([...headersList, { id: Date.now().toString(), key: '', value: '' }])}
-                        className="text-[10px] font-mono font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1.5 pt-1 cursor-pointer"
+                        className="text-[10px] font-mono font-bold text-amber-500 dark:text-amber-400 hover:text-amber-600 dark:hover:text-amber-300 flex items-center gap-1.5 pt-1 cursor-pointer"
                       >
                         <Plus size={13} /> ADD HEADER
                       </button>
@@ -667,13 +667,13 @@ export function AutocannonStudio({
 
                   {activeSubTab === 'cli' && (
                     <div className="space-y-2.5">
-                      <div className="relative group rounded-xl overflow-hidden border border-slate-800 bg-[#090C12]">
-                        <div className="bg-[#121722] px-3 py-1.5 border-b border-slate-800 flex items-center justify-between">
+                      <div className="relative group rounded-xl overflow-hidden border border-slate-800 bg-[#090C12] cli-terminal-container shadow-sm">
+                        <div className="bg-[#121722] px-3 py-1.5 border-b border-slate-800 flex items-center justify-between cli-terminal-topbar">
                           <div className="flex items-center gap-1.5">
                             <div className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
                             <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
                             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
-                            <span className="text-[10px] font-mono text-slate-400 ml-2 font-bold">TERMINAL COMMAND</span>
+                            <span className="text-[10px] font-mono text-slate-400 ml-2 font-bold cli-terminal-label">TERMINAL COMMAND</span>
                           </div>
                           <button
                             type="button"
@@ -684,7 +684,7 @@ export function AutocannonStudio({
                             {copiedCli ? 'COPIED' : 'COPY'}
                           </button>
                         </div>
-                        <pre className="p-3.5 font-mono text-xs text-amber-300 overflow-x-auto whitespace-pre-wrap select-all">
+                        <pre className="p-3.5 font-mono text-xs text-amber-400 dark:text-amber-300 overflow-x-auto whitespace-pre-wrap select-all font-semibold cli-terminal-code leading-relaxed">
                           {generatedCliCommand}
                         </pre>
                       </div>
@@ -704,20 +704,20 @@ export function AutocannonStudio({
               <div className="bg-[#0F1420] border border-slate-800/90 rounded-2xl p-6 shadow-xl space-y-6">
                 
                 {/* Result Header & Actions */}
-                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/80 pb-4 autocannon-result-header">
                   <div>
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/50" />
-                      <h2 className="text-sm font-mono font-black text-white uppercase tracking-wider">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-sm shadow-emerald-500/50" />
+                      <h2 className="text-sm font-mono font-black uppercase tracking-wider autocannon-completed-title text-white">
                         BENCHMARK COMPLETED
                       </h2>
-                      <span className="px-2.5 py-0.5 rounded-full bg-slate-800/90 text-[10px] font-mono text-slate-200 border border-slate-700 font-bold">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold autocannon-duration-badge bg-slate-800/90 text-slate-200 border border-slate-700">
                         {autocannonResult.durationSeconds}s DURATION
                       </span>
                     </div>
-                    <div className="text-xs font-mono text-slate-300 mt-1.5 truncate max-w-lg flex items-center gap-2">
-                      <span className="text-amber-400 font-bold px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">{autocannonResult.method}</span>
-                      <span className="truncate">{autocannonResult.url}</span>
+                    <div className="text-xs font-mono text-slate-300 mt-1.5 truncate max-w-lg flex items-center gap-2 autocannon-completed-url">
+                      <span className="text-amber-500 dark:text-amber-400 font-bold px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30">{autocannonResult.method}</span>
+                      <span className="truncate text-slate-300 autocannon-url-text">{autocannonResult.url}</span>
                     </div>
                   </div>
 
@@ -726,7 +726,7 @@ export function AutocannonStudio({
                       <button
                         type="button"
                         onClick={onClearResults}
-                        className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold bg-[#141C2B] hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-slate-750 hover:border-rose-800/50 flex items-center gap-1.5 cursor-pointer transition-all shadow-sm active:scale-95"
+                        className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold bg-[#141C2B] hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-slate-750 hover:border-rose-800/50 flex items-center gap-1.5 cursor-pointer transition-all shadow-sm active:scale-95 autocannon-secondary-btn"
                         title="Clear benchmark results"
                       >
                         <Trash2 size={13} /> CLEAR
@@ -735,14 +735,14 @@ export function AutocannonStudio({
                     <button
                       type="button"
                       onClick={handleDownloadJson}
-                      className="px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-[#141C2B] hover:bg-slate-800 text-slate-200 border border-slate-750 flex items-center gap-1.5 cursor-pointer hover:text-white transition-all shadow-sm active:scale-95"
+                      className="px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-[#141C2B] hover:bg-slate-800 text-slate-200 border border-slate-750 flex items-center gap-1.5 cursor-pointer hover:text-white transition-all shadow-sm active:scale-95 autocannon-secondary-btn"
                     >
                       <Download size={13} /> JSON REPORT
                     </button>
                     <button
                       type="button"
                       onClick={handleRun}
-                      className="px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 flex items-center gap-1.5 cursor-pointer transition-all shadow-sm active:scale-95"
+                      className="px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 flex items-center gap-1.5 cursor-pointer transition-all shadow-sm active:scale-95 autocannon-rerun-btn"
                     >
                       <RefreshCw size={13} /> RE-RUN
                     </button>
@@ -753,100 +753,100 @@ export function AutocannonStudio({
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
                   
                   {/* Card 1: Total Requests */}
-                  <div className="p-4 rounded-xl bg-[#141A28] border border-cyan-500/20 shadow-md relative overflow-hidden group hover:border-cyan-500/40 transition-all">
+                  <div className="p-4 rounded-xl bg-[#141A28] border border-cyan-500/20 shadow-md relative overflow-hidden group hover:border-cyan-500/40 transition-all autocannon-metric-card">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/5 rounded-full blur-xl pointer-events-none" />
                     <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                      <span>TOTAL REQUESTS</span>
-                      <Activity size={14} className="text-cyan-400" />
+                      <span className="font-semibold">TOTAL REQUESTS</span>
+                      <Activity size={14} className="text-cyan-500 dark:text-cyan-400" />
                     </div>
-                    <div className="text-3xl font-black font-mono text-white tracking-tight">
+                    <div className="text-3xl font-black font-mono text-white tracking-tight autocannon-val-main">
                       {autocannonResult.totalRequests.toLocaleString()}
                     </div>
-                    <div className="text-[10px] font-mono text-cyan-400 mt-1 font-semibold flex items-center gap-1">
+                    <div className="text-[10px] font-mono text-cyan-600 dark:text-cyan-400 mt-1 font-semibold flex items-center gap-1">
                       <Zap size={11} />
                       {autocannonResult.durationSeconds > 0 ? `${(autocannonResult.totalRequests / autocannonResult.durationSeconds).toFixed(0)} req/s avg` : ''}
                     </div>
                   </div>
 
                   {/* Card 2: Avg Throughput */}
-                  <div className="p-4 rounded-xl bg-[#141A28] border border-amber-500/20 shadow-md relative overflow-hidden group hover:border-amber-500/40 transition-all">
+                  <div className="p-4 rounded-xl bg-[#141A28] border border-amber-500/20 shadow-md relative overflow-hidden group hover:border-amber-500/40 transition-all autocannon-metric-card">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-xl pointer-events-none" />
                     <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                      <span>AVG THROUGHPUT</span>
-                      <Zap size={14} className="text-amber-400" />
+                      <span className="font-semibold">AVG THROUGHPUT</span>
+                      <Zap size={14} className="text-amber-500 dark:text-amber-400" />
                     </div>
-                    <div className="text-3xl font-black font-mono text-amber-300 tracking-tight">
+                    <div className="text-3xl font-black font-mono text-amber-500 dark:text-amber-300 tracking-tight autocannon-val-amber">
                       {Math.round(autocannonResult.requests.average).toLocaleString()} <span className="text-xs font-normal text-slate-400">RPS</span>
                     </div>
-                    <div className="text-[10px] font-mono text-amber-400/80 mt-1 font-semibold">
+                    <div className="text-[10px] font-mono text-amber-600 dark:text-amber-400/80 mt-1 font-semibold">
                       Max Peak: {Math.round(autocannonResult.requests.max).toLocaleString()} RPS
                     </div>
                   </div>
 
                   {/* Card 3: Avg Latency */}
-                  <div className="p-4 rounded-xl bg-[#141A28] border border-emerald-500/20 shadow-md relative overflow-hidden group hover:border-emerald-500/40 transition-all">
+                  <div className="p-4 rounded-xl bg-[#141A28] border border-emerald-500/20 shadow-md relative overflow-hidden group hover:border-emerald-500/40 transition-all autocannon-metric-card">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
                     <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                      <span>AVG LATENCY</span>
-                      <Clock size={14} className="text-emerald-400" />
+                      <span className="font-semibold">AVG LATENCY</span>
+                      <Clock size={14} className="text-emerald-500 dark:text-emerald-400" />
                     </div>
-                    <div className="text-3xl font-black font-mono text-emerald-400 tracking-tight">
+                    <div className="text-3xl font-black font-mono text-emerald-500 dark:text-emerald-400 tracking-tight autocannon-val-emerald">
                       {autocannonResult.latency.average.toFixed(1)} <span className="text-xs font-normal text-slate-400">ms</span>
                     </div>
-                    <div className="text-[10px] font-mono text-emerald-400/80 mt-1 font-semibold">
+                    <div className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400/80 mt-1 font-semibold">
                       Min {autocannonResult.latency.min.toFixed(1)}ms • Max {autocannonResult.latency.max.toFixed(1)}ms
                     </div>
                   </div>
 
                   {/* Card 4: 99th Percentile */}
-                  <div className="p-4 rounded-xl bg-[#141A28] border border-rose-500/20 shadow-md relative overflow-hidden group hover:border-rose-500/40 transition-all">
+                  <div className="p-4 rounded-xl bg-[#141A28] border border-rose-500/20 shadow-md relative overflow-hidden group hover:border-rose-500/40 transition-all autocannon-metric-card">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/5 rounded-full blur-xl pointer-events-none" />
                     <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                      <span>99TH PERCENTILE (P99)</span>
-                      <Gauge size={14} className="text-rose-400" />
+                      <span className="font-semibold">99TH PERCENTILE (P99)</span>
+                      <Gauge size={14} className="text-rose-500 dark:text-rose-400" />
                     </div>
-                    <div className="text-3xl font-black font-mono text-rose-400 tracking-tight">
+                    <div className="text-3xl font-black font-mono text-rose-500 dark:text-rose-400 tracking-tight autocannon-val-rose">
                       {autocannonResult.latency.p99.toFixed(1)} <span className="text-xs font-normal text-slate-400">ms</span>
                     </div>
-                    <div className="text-[10px] font-mono text-rose-400/80 mt-1 font-semibold">
+                    <div className="text-[10px] font-mono text-rose-600 dark:text-rose-400/80 mt-1 font-semibold">
                       p90: {autocannonResult.latency.p90.toFixed(1)}ms • p99.9: {autocannonResult.latency.p99_9.toFixed(1)}ms
                     </div>
                   </div>
 
                   {/* Card 5: Data Transferred */}
-                  <div className="p-4 rounded-xl bg-[#141A28] border border-purple-500/20 shadow-md relative overflow-hidden group hover:border-purple-500/40 transition-all">
+                  <div className="p-4 rounded-xl bg-[#141A28] border border-purple-500/20 shadow-md relative overflow-hidden group hover:border-purple-500/40 transition-all autocannon-metric-card">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 rounded-full blur-xl pointer-events-none" />
                     <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                      <span>DATA TRANSFERRED</span>
-                      <HardDrive size={14} className="text-purple-400" />
+                      <span className="font-semibold">DATA TRANSFERRED</span>
+                      <HardDrive size={14} className="text-purple-500 dark:text-purple-400" />
                     </div>
-                    <div className="text-3xl font-black font-mono text-purple-300 tracking-tight">
+                    <div className="text-3xl font-black font-mono text-purple-600 dark:text-purple-300 tracking-tight autocannon-val-purple">
                       {(autocannonResult.totalBytes / 1024 / 1024).toFixed(2)} <span className="text-xs font-normal text-slate-400">MB</span>
                     </div>
-                    <div className="text-[10px] font-mono text-purple-400/80 mt-1 font-semibold">
+                    <div className="text-[10px] font-mono text-purple-600 dark:text-purple-400/80 mt-1 font-semibold">
                       {((autocannonResult.throughput.average || 0) / 1024).toFixed(0)} kB/s avg speed
                     </div>
                   </div>
 
                   {/* Card 6: Success Rate */}
-                  <div className="p-4 rounded-xl bg-[#141A28] border border-emerald-500/20 shadow-md relative overflow-hidden group hover:border-emerald-500/40 transition-all">
+                  <div className="p-4 rounded-xl bg-[#141A28] border border-emerald-500/20 shadow-md relative overflow-hidden group hover:border-emerald-500/40 transition-all autocannon-metric-card">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
                     <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                      <span>SUCCESS RATE</span>
-                      <ShieldCheck size={14} className="text-emerald-400" />
+                      <span className="font-semibold">SUCCESS RATE</span>
+                      <ShieldCheck size={14} className="text-emerald-500 dark:text-emerald-400" />
                     </div>
                     <div className={cn(
                       "text-3xl font-black font-mono tracking-tight",
                       autocannonResult.totalRequests > 0 && ((autocannonResult.statusCodes['2xx'] / autocannonResult.totalRequests) * 100) >= 95
-                        ? "text-emerald-400"
-                        : "text-amber-400"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-amber-600 dark:text-amber-400"
                     )}>
                       {autocannonResult.totalRequests > 0 
                         ? `${((autocannonResult.statusCodes['2xx'] / autocannonResult.totalRequests) * 100).toFixed(1)}%`
                         : '0%'}
                     </div>
                     <div className="text-[10px] font-mono text-slate-400 mt-1 font-semibold">
-                      <span className="text-emerald-400">{autocannonResult.statusCodes['2xx']} ok</span> • <span className="text-rose-400">{autocannonResult.errors} errors</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">{autocannonResult.statusCodes['2xx']} ok</span> • <span className="text-rose-600 dark:text-rose-400 font-bold">{autocannonResult.errors} errors</span>
                     </div>
                   </div>
                 </div>
