@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { renderTextWithLinks } from '../utils/linkUtils';
 
 interface JsonInteractiveNodeProps {
   key?: React.Key;
@@ -103,8 +104,10 @@ export function JsonInteractiveNode({
         <span className="w-5 shrink-0 inline-block" />
         {label && <span className="text-[#60a5fa] json-node-key whitespace-nowrap shrink-0">"{label}"</span>}
         {label && <span className="text-slate-400 json-node-punct mx-2 shrink-0">:</span>}
-        <div className="text-[#34d399] json-node-string font-normal break-all flex items-center">
-          "{val}"
+        <div className="text-[#34d399] json-node-string font-normal break-all">
+          <span>"</span>
+          {renderTextWithLinks(val)}
+          <span>"</span>
           {!isLast && <span className="text-slate-400 json-node-punct font-normal">,</span>}
         </div>
         {renderCopyButton(label ? `Copy "${label}" value` : 'Copy string')}

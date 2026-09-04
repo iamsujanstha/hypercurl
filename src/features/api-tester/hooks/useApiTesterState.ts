@@ -455,18 +455,18 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
     } : t));
   }, [activeTabId]);
 
-  const resolveVars = useCallback((text: string) => {
+  const resolveVars = useCallback((text: string, preserveDynamic?: boolean) => {
     if (!text) return '';
-    return interpolateVariables(text, variables);
+    return interpolateVariables(text, variables, { preserveDynamic });
   }, [variables]);
 
-  const getResolvedConfig = useCallback((tab: Tab): RequestConfig => {
-    let body = resolveVars(tab.config.body || '');
+  const getResolvedConfig = useCallback((tab: Tab, preserveDynamic?: boolean): RequestConfig => {
+    let body = resolveVars(tab.config.body || '', preserveDynamic);
     
     if (tab.config.method === 'GRAPHQL') {
       let queryStr = (tab.graphqlQuery || '').trim();
       let vars = {};
-      let rawVars = resolveVars(tab.graphqlVariables || '').trim();
+      let rawVars = resolveVars(tab.graphqlVariables || '', preserveDynamic).trim();
 
       // Smart rescue fallback for GraphQL requests that have empty query fields:
       if (!queryStr || !rawVars) {
@@ -505,14 +505,14 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
       }
       
       body = JSON.stringify({
-        query: resolveVars(queryStr),
+        query: resolveVars(queryStr, preserveDynamic),
         variables: vars
       });
     }
 
     const finalHeaders = tab.headersList.reduce((acc, h) => {
-      const resolvedKey = resolveVars(h.key).trim();
-      const resolvedValue = resolveVars(h.value).trim();
+      const resolvedKey = resolveVars(h.key, preserveDynamic).trim();
+      const resolvedValue = resolveVars(h.value, preserveDynamic).trim();
       if (resolvedKey) acc[resolvedKey] = resolvedValue;
       return acc;
     }, {} as Record<string, string>);
@@ -537,7 +537,7 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
 
     return {
       ...tab.config,
-      url: resolveVars(tab.config.url),
+      url: resolveVars(tab.config.url, preserveDynamic),
       headers: finalHeaders,
       body
     };
@@ -714,17 +714,38 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
 
     const mode = activeTab.testMode || 'functional';
 
+    if (activeTab.batchMode) {
+      if (!ws) return;
+      updateActiveTab({ loading: true, batchResults: [] });
+      ws.send(JSON.stringify({
+        type: 'run-batch',
+        tabId: activeTabId,
+        payload: {
+          request: getResolvedConfig(activeTab, true),
+          iterations: activeTab.batchIterations || 10,
+          concurrency: activeTab.batchConcurrency || 5
+        }
+      }));
+      return;
+    }
+
     if (mode === 'load') {
+      const tc = activeTab.testConfig;
       handleStartAutocannon({
         url: resolvedConfig.url,
         method: resolvedConfig.method,
         headers: resolvedConfig.headers,
         body: resolvedConfig.body,
-        connections: activeTab.testConfig?.connections || 50,
-        duration: activeTab.testConfig?.duration || 10,
-        pipelining: activeTab.testConfig?.pipelining || 1,
-        rate: activeTab.testConfig?.rateLimit,
-        title: `${activeTab.name} Load Test`
+        connections: tc?.connections || 50,
+        duration: tc?.duration || 10,
+        pipelining: tc?.pipelining || 1,
+        rate: tc?.isRateLimited && tc?.rateLimit ? tc.rateLimit : undefined,
+        warmupDuration: (tc?.warmupDuration && tc.warmupDuration > 0) ? tc.warmupDuration : undefined,
+        timeout: tc?.timeout || 10,
+        title: `${activeTab.name || resolvedConfig.method} Autocannon Load Test`,
+        slaThresholds: tc?.enableSla !== false && (tc?.slaThresholds || activeTab.slaThresholds) 
+          ? (tc?.slaThresholds || activeTab.slaThresholds) 
+          : undefined
       });
       return;
     }
@@ -769,22 +790,9 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
       return;
     }
 
-    if (activeTab.batchMode) {
-      if (!ws) return;
-      updateActiveTab({ loading: true, batchResults: [] });
-      ws.send(JSON.stringify({
-        type: 'run-batch',
-        tabId: activeTabId,
-        payload: {
-          request: resolvedConfig,
-          iterations: activeTab.batchIterations || 10,
-          concurrency: activeTab.batchConcurrency || 5
-        }
-      }));
-    } else {
-      updateActiveTab({ loading: true });
-      try {
-        const response = await fetch('/api/execute', {
+    updateActiveTab({ loading: true });
+    try {
+      const response = await fetch('/api/execute', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(resolvedConfig),
@@ -888,7 +896,6 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
       } finally {
         updateActiveTab({ loading: false });
       }
-    }
   };
 
   const createTab = (savedReq?: SavedRequest) => {
@@ -974,7 +981,7 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
   const handleStartLabTest = (moduleId: string, settings: any) => {
     if (!ws || !activeTab) return;
     if (moduleId === 'autocannon' || moduleId === 'load') {
-      const resolved = getResolvedConfig(activeTab);
+      const resolved = getResolvedConfig(activeTab, true);
       handleStartAutocannon({
         url: resolved.url,
         method: resolved.method,
@@ -1002,7 +1009,7 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
       type: 'run-batch',
       tabId: activeTabId,
       payload: {
-        request: getResolvedConfig(activeTab),
+        request: getResolvedConfig(activeTab, true),
         testModule: settings.backendModuleId || moduleId,
         uiModule: moduleId,
         iterations: settings.iterations,

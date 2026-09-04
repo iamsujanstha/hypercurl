@@ -1,6 +1,7 @@
 import express from "express";
 import { createServer } from "node:http";
 import path from "node:path";
+import multer from "multer";
 import { WebSocketServer, WebSocket } from "ws";
 import { createServer as createViteServer } from "vite";
 import { CurlEngine, RequestConfig, CurlResult } from "./src/server/modules/curl-engine";
@@ -34,6 +35,22 @@ async function startServer() {
   // Mock Race Condition Demo State
   let globalBalance = 1000;
   let transactionLogs: any[] = [];
+
+  const upload = multer({ dest: '/tmp/hypercurl-uploads/' });
+
+  app.post("/api/upload-file", upload.single('file'), (req, res) => {
+    if (!req.file) {
+      res.status(400).json({ error: "No file uploaded" });
+      return;
+    }
+    res.json({
+      success: true,
+      fileId: req.file.filename,
+      originalName: req.file.originalname,
+      size: req.file.size,
+      path: req.file.path
+    });
+  });
 
   // API Routes
   app.get("/api/history", async (req, res) => {
@@ -83,6 +100,209 @@ async function startServer() {
       res.json({ success: true, message: `Collection ${id} removed.` });
     } catch (error: any) {
       console.error("Error deleting collection:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Environments REST API
+  app.get("/api/environments", async (req, res) => {
+    try {
+      const envs = await Store.getEnvironments();
+      res.json(envs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/environments", async (req, res) => {
+    try {
+      await Store.saveEnvironment(req.body);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/environments/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await Store.deleteEnvironment(id);
+      res.json({ success: true, message: `Environment ${id} removed.` });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Benchmarks Snapshots REST API
+  app.get("/api/benchmarks", async (req, res) => {
+    try {
+      const benchmarks = await Store.getBenchmarks();
+      res.json(benchmarks);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/benchmarks", async (req, res) => {
+    try {
+      await Store.saveBenchmark(req.body);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/benchmarks/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await Store.deleteBenchmark(id);
+      res.json({ success: true, message: `Benchmark ${id} removed.` });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Headless CI/CD Test Suite Runner Route
+  app.post("/api/test-runner/run", async (req, res) => {
+    try {
+      const { suite, variables = {} } = req.body;
+      if (!suite || !Array.isArray(suite.steps)) {
+        res.status(400).json({ error: "Missing or invalid 'suite' definition with steps." });
+        return;
+      }
+
+      const runtimeVars = { ...variables };
+      const stepResults: any[] = [];
+      const startTime = Date.now();
+
+      for (let i = 0; i < suite.steps.length; i++) {
+        const step = suite.steps[i];
+        
+        // Resolve URL & Headers
+        let resolvedUrl = step.url || "";
+        Object.entries(runtimeVars).forEach(([k, v]) => {
+          resolvedUrl = resolvedUrl.replace(new RegExp(`{{${k}}}`, "g"), String(v));
+        });
+
+        const headers: Record<string, string> = {};
+        if (Array.isArray(step.headersList)) {
+          step.headersList.forEach((h: any) => {
+            if (h.enabled !== false && h.key?.trim()) {
+              let val = h.value || "";
+              Object.entries(runtimeVars).forEach(([k, v]) => {
+                val = val.replace(new RegExp(`{{${k}}}`, "g"), String(v));
+              });
+              headers[h.key.trim()] = val;
+            }
+          });
+        }
+
+        let resolvedBody = step.body;
+        if (resolvedBody) {
+          Object.entries(runtimeVars).forEach(([k, v]) => {
+            resolvedBody = resolvedBody.replace(new RegExp(`{{${k}}}`, "g"), String(v));
+          });
+        }
+
+        const stepStart = Date.now();
+        let curlRes: CurlResult | undefined;
+        let stepStatus: "passed" | "failed" = "passed";
+        let stepError: string | undefined;
+
+        try {
+          curlRes = await CurlEngine.execute({
+            url: resolvedUrl,
+            method: step.method || "GET",
+            headers,
+            body: resolvedBody,
+            timeout: step.timeoutMs ? Math.round(step.timeoutMs / 1000) : 10
+          });
+        } catch (err: any) {
+          stepStatus = "failed";
+          stepError = err.message || "Request execution failed";
+        }
+
+        const stepDuration = Date.now() - stepStart;
+        const assertions: any[] = [];
+
+        if (curlRes && Array.isArray(step.assertions)) {
+          step.assertions.forEach((a: any) => {
+            let pass = false;
+            let act = "";
+            if (a.type === "status") {
+              act = String(curlRes!.status);
+              pass = act === String(a.value);
+            } else if (a.type === "latency") {
+              act = `${curlRes!.responseTime}ms`;
+              pass = curlRes!.responseTime <= parseInt(a.value, 10);
+            } else if (a.type === "body_contains") {
+              act = (curlRes!.body || "").substring(0, 50);
+              pass = (curlRes!.body || "").includes(a.value);
+            }
+            if (!pass) stepStatus = "failed";
+            assertions.push({ ruleId: a.id, type: a.type, passed: pass, expected: a.value, actual: act });
+          });
+        }
+
+        // Variable extraction
+        const extracted: Record<string, string> = {};
+        if (curlRes && Array.isArray(step.extractors)) {
+          step.extractors.forEach((ext: any) => {
+            if (ext.jsonPath && ext.variableName && curlRes!.body) {
+              try {
+                const parsed = JSON.parse(curlRes!.body);
+                const pathParts = ext.jsonPath.replace(/^\$\.?/, "").split(".");
+                let val: any = parsed;
+                for (const p of pathParts) {
+                  if (val && typeof val === "object") val = val[p];
+                  else { val = undefined; break; }
+                }
+                if (val !== undefined) {
+                  const strVal = typeof val === "object" ? JSON.stringify(val) : String(val);
+                  extracted[ext.variableName] = strVal;
+                  runtimeVars[ext.variableName] = strVal;
+                }
+              } catch {}
+            }
+          });
+        }
+
+        stepResults.push({
+          stepId: step.id,
+          stepName: step.name,
+          method: step.method,
+          url: resolvedUrl,
+          durationMs: stepDuration,
+          status: stepStatus,
+          error: stepError,
+          assertions,
+          extractedVariables: extracted
+        });
+
+        if (stepStatus === "failed" && suite.stopOnFailure) {
+          break;
+        }
+      }
+
+      const passedCount = stepResults.filter(s => s.status === "passed").length;
+      const failedCount = stepResults.filter(s => s.status === "failed").length;
+
+      const summary = {
+        suiteId: suite.id || "ad-hoc",
+        suiteName: suite.name || "Test Suite",
+        totalSteps: suite.steps.length,
+        executedSteps: stepResults.length,
+        passedSteps: passedCount,
+        failedSteps: failedCount,
+        totalDurationMs: Date.now() - startTime,
+        status: failedCount === 0 ? "PASSED" : "FAILED",
+        exitCode: failedCount === 0 ? 0 : 1,
+        stepResults
+      };
+
+      res.status(failedCount === 0 ? 200 : 400).json(summary);
+    } catch (error: any) {
+      console.error("Headless runner error:", error);
       res.status(500).json({ error: error.message });
     }
   });

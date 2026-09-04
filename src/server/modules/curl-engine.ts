@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import * as fs from 'node:fs';
+import { Readable } from 'node:stream';
 import { v4 as uuidv4 } from 'uuid';
 import { SystemMetrics, RequestSystemMetrics } from './system-metrics';
 import { SecurityGuard } from './security';
@@ -10,6 +12,10 @@ export interface RequestConfig {
   url: string;
   headers: Record<string, string>;
   body?: string;
+  bodyFile?: string; // Path to local file on server
+  bodyFileName?: string;
+  bodyFileSize?: number;
+  timeout?: number;
 }
 
 export interface CurlTimingBreakdown {
@@ -94,7 +100,9 @@ export class CurlEngine {
     });
 
     // Body
-    if (config.body && (['POST', 'PUT', 'PATCH'].includes(config.method) || config.method === 'GRAPHQL')) {
+    if (config.bodyFile) {
+      args.push('--data-binary', `@${config.bodyFile}`);
+    } else if (config.body && (['POST', 'PUT', 'PATCH'].includes(config.method) || config.method === 'GRAPHQL')) {
       args.push('-d', config.body);
     }
 
@@ -119,7 +127,7 @@ export class CurlEngine {
     const startTime = Date.now();
     const startCpu = process.cpuUsage();
     const startMem = process.memoryUsage();
-    const requestSize = config.body ? (typeof Buffer !== 'undefined' ? Buffer.byteLength(config.body, 'utf8') : config.body.length) : 0;
+    const requestSize = config.bodyFile ? 0 : (config.body ? (typeof Buffer !== 'undefined' ? Buffer.byteLength(config.body, 'utf8') : config.body.length) : 0);
 
     // SSRF & Target Security Validation
     const secCheck = SecurityGuard.validateTargetUrl(config.url);
@@ -210,7 +218,19 @@ export class CurlEngine {
         fetchOptions.signal = signal;
       }
 
-      if (config.body && (['POST', 'PUT', 'PATCH'].includes(config.method) || isGraphql)) {
+      if (config.bodyFile) {
+        if (typeof fs !== 'undefined' && fs.createReadStream) {
+          try {
+             fetchOptions.body = Readable.toWeb(fs.createReadStream(config.bodyFile));
+             // Node.js 18+ fetch requires duplex: 'half' when using a stream
+             (fetchOptions as any).duplex = 'half';
+          } catch(e) {
+             fetchOptions.body = fs.createReadStream(config.bodyFile) as any;
+          }
+        } else {
+          // If no fs (e.g., client-side edge case), this will fail or skip
+        }
+      } else if (config.body && (['POST', 'PUT', 'PATCH'].includes(config.method) || isGraphql)) {
         fetchOptions.body = config.body;
       }
 

@@ -1,14 +1,182 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HyperCurl</title>
+    <title>HyperCurl — High-Performance cURL GUI & Load Testing Studio</title>
+    <meta name="description" content="HyperCurl is a developer-grade HTTP client and socket load testing engine combining real-time cURL command generation, timing waterfall analysis, Autocannon concurrency benchmarking, and sequential test suites." />
+    <meta name="keywords" content="curl, api client, autocannon, load testing, http client, rest api, graphql, rest client, benchmarking" />
+    
+    <!-- Open Graph / Meta -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="HyperCurl — High-Performance cURL GUI & Load Testing Studio" />
+    <meta property="og:description" content="Developer-grade HTTP client with cURL execution, Autocannon load testing, timing waterfall metrics, and automated test suites." />
+    
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%23090D14'/%3E%3Cpath d='M30 65c-6 0-10-4-10-10V45c0-6 4-10 10-10h5v6h-5c-3 0-4 1-4 4v10c0 3 1 4 4 4h5v6h-5zM70 65h-5v-6h5c3 0 4-1 4-4V45c0-3-1-4-4-4h-5v-6h5c6 0 10 4 10 10v10c0 6-4 10-10 10z' fill='%2310B981'/%3E%3Cpath d='M43 65l6-30h6l-6 30h-6z' fill='%2334D399'/%3E%3C/svg%3E" />
+    
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "HyperCurl",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "All",
+      "description": "High-performance cURL client, Autocannon socket load testing studio, and sequential API test runner."
+    }
+    </script>
   </head>
-  <body>
-    <div id="root"></div>
+  <body class="bg-[#0B0D11] text-slate-100 antialiased selection:bg-emerald-500 selection:text-black">
+    <!-- Server-Side Pre-Rendered Root DOM for web_fetch, scrapers, and instant initial paint -->
+    <div id="root">
+      <div id="hypercurl-ssr-shell" class="w-full h-screen flex flex-col bg-[#0B0D11] text-slate-200 overflow-hidden font-sans">
+        <!-- Top Navigation Header -->
+        <header id="ssr-navbar" class="h-12 bg-[#090C12] border-b border-slate-800 flex items-center justify-between px-4 shrink-0">
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
+              <div class="w-6 h-6 rounded-md bg-emerald-500 flex items-center justify-center font-black text-black text-xs">H</div>
+              <h1 class="text-sm font-bold tracking-tight text-white flex items-center gap-1.5">
+                Hyper<span class="text-emerald-400">Curl</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono">v2.4 SSR</span>
+              </h1>
+            </div>
+            <nav class="hidden md:flex items-center gap-1 text-xs text-slate-400 pl-4 border-l border-slate-800">
+              <span class="px-2 py-1 bg-slate-800/60 rounded text-slate-200 font-medium">HTTP Client</span>
+              <span class="px-2 py-1 hover:text-slate-200 cursor-pointer">Autocannon Studio</span>
+              <span class="px-2 py-1 hover:text-slate-200 cursor-pointer">Test Suites</span>
+              <span class="px-2 py-1 hover:text-slate-200 cursor-pointer">History &amp; Logs</span>
+            </nav>
+          </div>
+          <div class="flex items-center gap-2 text-xs font-mono">
+            <span class="px-2 py-1 rounded bg-[#101420] border border-slate-800 text-cyan-400">Environment: {{Production}}</span>
+            <span class="px-2.5 py-1 rounded bg-emerald-900/40 border border-emerald-700/60 text-emerald-300 font-bold">Engine: Active</span>
+          </div>
+        </header>
+
+        <!-- Main Workspace Shell -->
+        <div id="ssr-workspace-body" class="flex-1 flex overflow-hidden">
+          <!-- Left Sidebar -->
+          <aside id="ssr-sidebar" class="w-64 bg-[#090C12] border-r border-slate-800 p-3 hidden md:flex flex-col gap-4">
+            <div>
+              <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Collections</div>
+              <ul class="space-y-1 text-xs">
+                <li class="p-2 rounded bg-slate-800/40 text-emerald-300 font-medium flex items-center justify-between">
+                  <span>📁 Default API Collection</span>
+                  <span class="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">8 reqs</span>
+                </li>
+                <li class="p-2 rounded hover:bg-slate-800/30 text-slate-300 flex items-center justify-between">
+                  <span>📁 Autocannon Benchmarks</span>
+                  <span class="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">3 runs</span>
+                </li>
+                <li class="p-2 rounded hover:bg-slate-800/30 text-slate-300 flex items-center justify-between">
+                  <span>📁 Microservices Health</span>
+                  <span class="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">5 steps</span>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Features</div>
+              <div class="space-y-1.5 text-xs text-slate-400">
+                <div class="flex items-center gap-2 text-slate-300">⚡ High-Concurrency Autocannon</div>
+                <div class="flex items-center gap-2 text-slate-300">🔍 Real-Time DNS/TLS/TTFB Telemetry</div>
+                <div class="flex items-center gap-2 text-slate-300">🛡️ SSRF Protected Proxy Engine</div>
+                <div class="flex items-center gap-2 text-slate-300">📊 SLA Threshold Assertions</div>
+              </div>
+            </div>
+          </aside>
+
+          <!-- Central Request & Response Stage -->
+          <main id="ssr-main-content" class="flex-1 flex flex-col min-w-0 bg-[#0B0D11] overflow-y-auto">
+            <!-- URL Composer Bar -->
+            <section class="p-3 bg-[#0A0D15] border-b border-slate-800 flex items-center gap-2">
+              <span class="px-2.5 py-1.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-black tracking-wide">GET</span>
+              <div class="flex-1 bg-[#101420] border border-slate-800 rounded px-3 py-1.5 text-xs font-mono text-slate-200">
+                https://httpbin.org/get
+              </div>
+              <button class="px-4 py-1.5 rounded bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-500 shadow-md">
+                SEND REQUEST
+              </button>
+            </section>
+
+            <!-- Command Preview Bar -->
+            <div class="px-3 py-2 bg-[#05070B] border-b border-slate-850 flex items-center justify-between text-xs font-mono">
+              <span class="text-slate-400 truncate">
+                <strong class="text-emerald-400">cURL:</strong> curl -X GET "https://httpbin.org/get" -H "Accept: application/json"
+              </span>
+              <span class="text-slate-500 text-[10px] shrink-0">Click to Copy</span>
+            </div>
+
+            <!-- Workspace Columns / Panels -->
+            <div class="flex-1 grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-800 overflow-hidden">
+              <!-- Left Column: Request Configuration -->
+              <div class="p-4 flex flex-col gap-3 overflow-y-auto">
+                <div class="flex gap-2 text-xs border-b border-slate-800 pb-2">
+                  <span class="font-bold text-emerald-400 border-b-2 border-emerald-400 pb-1">Headers (2)</span>
+                  <span class="text-slate-400 hover:text-slate-200 cursor-pointer">Params (0)</span>
+                  <span class="text-slate-400 hover:text-slate-200 cursor-pointer">Body</span>
+                  <span class="text-slate-400 hover:text-slate-200 cursor-pointer">Auth</span>
+                  <span class="text-slate-400 hover:text-slate-200 cursor-pointer">Assertions</span>
+                </div>
+                <div class="bg-[#090C12] border border-slate-800 rounded-lg p-3 text-xs font-mono space-y-2">
+                  <div class="flex justify-between border-b border-slate-800 pb-1 text-slate-400">
+                    <span>Key</span>
+                    <span>Value</span>
+                  </div>
+                  <div class="flex justify-between text-slate-300">
+                    <span class="text-sky-300">Accept</span>
+                    <span>application/json</span>
+                  </div>
+                  <div class="flex justify-between text-slate-300">
+                    <span class="text-sky-300">User-Agent</span>
+                    <span>HyperCurl/2.4</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right Column: Response Inspector -->
+              <div class="p-4 flex flex-col gap-3 overflow-y-auto bg-[#07090E]">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2 text-xs">
+                    <span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">200 OK</span>
+                    <span class="text-slate-400 font-mono">42 ms</span>
+                    <span class="text-slate-400 font-mono">1.28 KB</span>
+                  </div>
+                  <span class="text-[10px] text-slate-400 font-mono">application/json</span>
+                </div>
+
+                <!-- Timing Breakdown -->
+                <div class="bg-[#0A0D15] border border-slate-800 rounded-lg p-3 text-xs font-mono space-y-2">
+                  <div class="text-[10px] uppercase font-bold text-slate-400">Network Timing Stage Waterfall</div>
+                  <div class="grid grid-cols-5 gap-1 text-[10px] text-center pt-1">
+                    <div class="bg-sky-950/40 text-sky-300 border border-sky-800/40 p-1 rounded">DNS: 4ms</div>
+                    <div class="bg-orange-950/40 text-orange-300 border border-orange-800/40 p-1 rounded">TCP: 8ms</div>
+                    <div class="bg-purple-950/40 text-purple-300 border border-purple-800/40 p-1 rounded">TLS: 12ms</div>
+                    <div class="bg-emerald-950/40 text-emerald-300 border border-emerald-800/40 p-1 rounded">TTFB: 16ms</div>
+                    <div class="bg-amber-950/40 text-amber-300 border border-amber-800/40 p-1 rounded">Xfer: 2ms</div>
+                  </div>
+                </div>
+
+                <!-- Response Body Preview -->
+                <div class="bg-[#090C12] border border-slate-800 rounded-lg p-3 flex-1 font-mono text-xs text-emerald-400 overflow-x-auto">
+<pre>{
+  "status": "online",
+  "engine": "HyperCurl Express Native",
+  "client": "Autocannon & cURL Unified",
+  "features": [
+    "cURL Replay & Formatting",
+    "Real-Time WebSockets Telemetry",
+    "Sub-Process Timing Probes",
+    "SSRF Guardrails Active"
+  ]
+}</pre>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
+
 

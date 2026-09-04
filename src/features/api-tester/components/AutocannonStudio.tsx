@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { Tab, AutocannonBenchmarkResult, AutocannonTickProgress, HttpMethod } from '../types';
 import { AutocannonConfig } from '@/server/modules/autocannon-engine';
 import { CliCommandModal } from './CliCommandModal';
+import { MetricInfoTooltip } from './MetricInfoTooltip';
 
 export interface AutocannonStudioProps {
   activeTab: Tab | null;
@@ -289,8 +290,11 @@ export function AutocannonStudio({
               {/* Real-time Telemetry Metrics Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3.5 relative z-10">
                 <div className="p-3.5 rounded-xl bg-black/50 border border-slate-800/90">
-                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                    <Zap size={13} className="text-amber-400" /> REQ / SEC
+                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
+                    <span className="flex items-center gap-1">
+                      <Zap size={13} className="text-amber-400" /> REQ / SEC
+                    </span>
+                    <MetricInfoTooltip metric="throughput" size={11} />
                   </div>
                   <div className="text-2xl font-black font-mono text-amber-300">
                     {autocannonProgress.currentRps > 0 ? Math.round(autocannonProgress.currentRps).toLocaleString() : '—'}
@@ -301,8 +305,11 @@ export function AutocannonStudio({
                 </div>
 
                 <div className="p-3.5 rounded-xl bg-black/50 border border-slate-800/90">
-                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                    <Clock size={13} className="text-cyan-400" /> LATENCY (AVG)
+                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
+                    <span className="flex items-center gap-1">
+                      <Clock size={13} className="text-cyan-400" /> LATENCY (AVG)
+                    </span>
+                    <MetricInfoTooltip metric="avg_latency" size={11} />
                   </div>
                   <div className="text-2xl font-black font-mono text-cyan-300">
                     {autocannonProgress.currentLatency > 0 ? `${autocannonProgress.currentLatency.toFixed(1)} ms` : '—'}
@@ -313,8 +320,11 @@ export function AutocannonStudio({
                 </div>
 
                 <div className="p-3.5 rounded-xl bg-black/50 border border-slate-800/90">
-                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                    <HardDrive size={13} className="text-purple-400" /> BYTES / SEC
+                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
+                    <span className="flex items-center gap-1">
+                      <HardDrive size={13} className="text-purple-400" /> BYTES / SEC
+                    </span>
+                    <MetricInfoTooltip metric="data_transferred" size={11} />
                   </div>
                   <div className="text-2xl font-black font-mono text-purple-300">
                     {autocannonProgress.currentBytesPerSec > 0 ? `${(autocannonProgress.currentBytesPerSec / 1024).toFixed(0)} kB/s` : '—'}
@@ -325,8 +335,11 @@ export function AutocannonStudio({
                 </div>
 
                 <div className="p-3.5 rounded-xl bg-black/50 border border-slate-800/90">
-                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                    <CheckCircle2 size={13} className="text-emerald-400" /> HTTP 2xx
+                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 size={13} className="text-emerald-400" /> HTTP 2xx
+                    </span>
+                    <MetricInfoTooltip metric="success_rate" size={11} />
                   </div>
                   <div className="text-2xl font-black font-mono text-emerald-400">
                     {autocannonProgress.status2xx.toLocaleString()}
@@ -337,8 +350,11 @@ export function AutocannonStudio({
                 </div>
 
                 <div className="p-3.5 rounded-xl bg-black/50 border border-slate-800/90">
-                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                    <AlertTriangle size={13} className="text-amber-400" /> 4xx / 5xx
+                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
+                    <span className="flex items-center gap-1">
+                      <AlertTriangle size={13} className="text-amber-400" /> 4xx / 5xx
+                    </span>
+                    <MetricInfoTooltip metric="status_codes" size={11} />
                   </div>
                   <div className="text-2xl font-black font-mono text-amber-400">
                     {(autocannonProgress.status4xx + autocannonProgress.status5xx).toLocaleString()}
@@ -349,8 +365,11 @@ export function AutocannonStudio({
                 </div>
 
                 <div className="p-3.5 rounded-xl bg-black/50 border border-slate-800/90">
-                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                    <XCircle size={13} className="text-rose-400" /> TIMEOUTS
+                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
+                    <span className="flex items-center gap-1">
+                      <XCircle size={13} className="text-rose-400" /> TIMEOUTS
+                    </span>
+                    <MetricInfoTooltip metric="errors_timeouts" size={11} />
                   </div>
                   <div className="text-2xl font-black font-mono text-rose-400">
                     {autocannonProgress.timeouts.toLocaleString()}
@@ -930,7 +949,10 @@ export function AutocannonStudio({
                       </div>
                       <div>
                         <div className="text-xs font-mono font-black uppercase tracking-wider flex items-center gap-2">
-                          <span>SLA CONTRACT: {autocannonResult.slaReport.passed ? 'ALL THRESHOLDS PASSED' : 'SLA VIOLATIONS DETECTED'}</span>
+                          <span className="flex items-center gap-1.5">
+                            SLA CONTRACT: {autocannonResult.slaReport.passed ? 'ALL THRESHOLDS PASSED' : 'SLA VIOLATIONS DETECTED'}
+                            <MetricInfoTooltip metric="sla_audit" size={13} />
+                          </span>
                           <span className={cn(
                             "px-2 py-0.5 rounded text-[10px] font-bold font-mono border",
                             autocannonResult.slaReport.passed
@@ -966,7 +988,10 @@ export function AutocannonStudio({
                   <div className="p-4 rounded-xl bg-[#141A28] border border-cyan-500/20 shadow-md relative overflow-hidden group hover:border-cyan-500/40 transition-all autocannon-metric-card">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/5 rounded-full blur-xl pointer-events-none" />
                     <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                      <span className="font-semibold">TOTAL REQUESTS</span>
+                      <span className="font-semibold flex items-center gap-1.5">
+                        <span>TOTAL REQUESTS</span>
+                        <MetricInfoTooltip metric="total_requests" size={12} />
+                      </span>
                       <Activity size={14} className="text-cyan-500 dark:text-cyan-400" />
                     </div>
                     <div className="text-3xl font-black font-mono text-white tracking-tight autocannon-val-main">
@@ -982,7 +1007,10 @@ export function AutocannonStudio({
                   <div className="p-4 rounded-xl bg-[#141A28] border border-amber-500/20 shadow-md relative overflow-hidden group hover:border-amber-500/40 transition-all autocannon-metric-card">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-xl pointer-events-none" />
                     <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                      <span className="font-semibold">AVG THROUGHPUT</span>
+                      <span className="font-semibold flex items-center gap-1.5">
+                        <span>AVG THROUGHPUT</span>
+                        <MetricInfoTooltip metric="throughput" size={12} />
+                      </span>
                       <Zap size={14} className="text-amber-500 dark:text-amber-400" />
                     </div>
                     <div className="text-3xl font-black font-mono text-amber-500 dark:text-amber-300 tracking-tight autocannon-val-amber">
@@ -997,7 +1025,10 @@ export function AutocannonStudio({
                   <div className="p-4 rounded-xl bg-[#141A28] border border-emerald-500/20 shadow-md relative overflow-hidden group hover:border-emerald-500/40 transition-all autocannon-metric-card">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
                     <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                      <span className="font-semibold">AVG LATENCY</span>
+                      <span className="font-semibold flex items-center gap-1.5">
+                        <span>AVG LATENCY</span>
+                        <MetricInfoTooltip metric="avg_latency" size={12} />
+                      </span>
                       <Clock size={14} className="text-emerald-500 dark:text-emerald-400" />
                     </div>
                     <div className="text-3xl font-black font-mono text-emerald-500 dark:text-emerald-400 tracking-tight autocannon-val-emerald">
@@ -1012,14 +1043,25 @@ export function AutocannonStudio({
                   <div className="p-4 rounded-xl bg-[#141A28] border border-rose-500/20 shadow-md relative overflow-hidden group hover:border-rose-500/40 transition-all autocannon-metric-card">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/5 rounded-full blur-xl pointer-events-none" />
                     <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                      <span className="font-semibold">99TH PERCENTILE (P99)</span>
+                      <span className="font-semibold flex items-center gap-1.5">
+                        <span>99TH PERCENTILE (P99)</span>
+                        <MetricInfoTooltip metric="p99" size={12} />
+                      </span>
                       <Gauge size={14} className="text-rose-500 dark:text-rose-400" />
                     </div>
                     <div className="text-3xl font-black font-mono text-rose-500 dark:text-rose-400 tracking-tight autocannon-val-rose">
                       {autocannonResult.latency.p99.toFixed(1)} <span className="text-xs font-normal text-slate-400">ms</span>
                     </div>
-                    <div className="text-[10px] font-mono text-rose-600 dark:text-rose-400/80 mt-1 font-semibold">
-                      p90: {autocannonResult.latency.p90.toFixed(1)}ms • p99.9: {autocannonResult.latency.p99_9.toFixed(1)}ms
+                    <div className="text-[10px] font-mono text-rose-600 dark:text-rose-400/80 mt-1 font-semibold flex items-center gap-1.5 flex-wrap">
+                      <span className="flex items-center gap-0.5">
+                        p90: {autocannonResult.latency.p90.toFixed(1)}ms
+                        <MetricInfoTooltip metric="p90" size={10} />
+                      </span>
+                      <span>•</span>
+                      <span className="flex items-center gap-0.5">
+                        p99.9: {autocannonResult.latency.p99_9.toFixed(1)}ms
+                        <MetricInfoTooltip metric="p99_9" size={10} />
+                      </span>
                     </div>
                   </div>
 
@@ -1027,7 +1069,10 @@ export function AutocannonStudio({
                   <div className="p-4 rounded-xl bg-[#141A28] border border-purple-500/20 shadow-md relative overflow-hidden group hover:border-purple-500/40 transition-all autocannon-metric-card">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 rounded-full blur-xl pointer-events-none" />
                     <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                      <span className="font-semibold">DATA TRANSFERRED</span>
+                      <span className="font-semibold flex items-center gap-1.5">
+                        <span>DATA TRANSFERRED</span>
+                        <MetricInfoTooltip metric="data_transferred" size={12} />
+                      </span>
                       <HardDrive size={14} className="text-purple-500 dark:text-purple-400" />
                     </div>
                     <div className="text-3xl font-black font-mono text-purple-600 dark:text-purple-300 tracking-tight autocannon-val-purple">
@@ -1042,7 +1087,10 @@ export function AutocannonStudio({
                   <div className="p-4 rounded-xl bg-[#141A28] border border-emerald-500/20 shadow-md relative overflow-hidden group hover:border-emerald-500/40 transition-all autocannon-metric-card">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
                     <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-                      <span className="font-semibold">SUCCESS RATE</span>
+                      <span className="font-semibold flex items-center gap-1.5">
+                        <span>SUCCESS RATE</span>
+                        <MetricInfoTooltip metric="success_rate" size={12} />
+                      </span>
                       <ShieldCheck size={14} className="text-emerald-500 dark:text-emerald-400" />
                     </div>
                     <div className={cn(
@@ -1134,7 +1182,9 @@ export function AutocannonStudio({
                     <div className="h-72 w-full bg-[#0A0D14] p-5 rounded-2xl border border-slate-800/90 shadow-inner">
                       <div className="text-[11px] font-mono font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center justify-between">
                         <span className="flex items-center gap-2">
-                          <Activity size={14} className="text-rose-400" /> THROUGHPUT (RPS) OVER TIME
+                          <Activity size={14} className="text-rose-400" />
+                          <span>THROUGHPUT (RPS) OVER TIME</span>
+                          <MetricInfoTooltip metric="throughput" size={12} />
                         </span>
                         <span className="text-amber-400 font-bold px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-[10px]">
                           PEAK: {Math.round(autocannonResult.requests.max).toLocaleString()} RPS
@@ -1167,7 +1217,10 @@ export function AutocannonStudio({
                     {/* Status Code Breakdown Bar */}
                     <div className="p-4 rounded-2xl bg-[#0A0D14] border border-slate-800/90 space-y-2.5 shadow-inner">
                       <div className="flex items-center justify-between text-[11px] font-mono font-bold text-slate-300 uppercase tracking-wider">
-                        <span>HTTP STATUS CODE DISTRIBUTION</span>
+                        <span className="flex items-center gap-1.5">
+                          <span>HTTP STATUS CODE DISTRIBUTION</span>
+                          <MetricInfoTooltip metric="status_codes" size={12} />
+                        </span>
                         <span className="text-slate-400 font-semibold">{autocannonResult.totalRequests.toLocaleString()} Total</span>
                       </div>
                       <div className="flex h-3.5 w-full rounded-full overflow-hidden bg-slate-850 p-0.5 border border-slate-800">
@@ -1236,6 +1289,7 @@ export function AutocannonStudio({
                         <div className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
                           <ShieldCheck size={16} className={autocannonResult.slaReport.passed ? "text-emerald-400" : "text-rose-400"} />
                           <span>Quality Gate Contract Specifications</span>
+                          <MetricInfoTooltip metric="sla_audit" size={12} />
                         </div>
                         <span className={cn(
                           "px-2.5 py-1 rounded-full text-[10px] font-mono font-bold border",
@@ -1297,9 +1351,11 @@ export function AutocannonStudio({
                     <div className="h-72 w-full bg-[#0A0D14] p-5 rounded-2xl border border-slate-800/90 shadow-inner">
                       <div className="text-[11px] font-mono font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center justify-between">
                         <span className="flex items-center gap-2">
-                          <Gauge size={14} className="text-cyan-400" /> LATENCY PERCENTILE CURVE (MS)
+                          <Gauge size={14} className="text-cyan-400" />
+                          <span>LATENCY PERCENTILE CURVE (MS)</span>
+                          <MetricInfoTooltip metric="p99" size={12} />
                         </span>
-                        <span className="text-rose-400 font-bold px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-[10px]">
+                        <span className="text-rose-400 font-bold px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-[10px] flex items-center gap-1">
                           p99: {autocannonResult.latency.p99.toFixed(1)} ms
                         </span>
                       </div>
@@ -1325,14 +1381,26 @@ export function AutocannonStudio({
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                      {autocannonResult.percentiles.map((p) => (
-                        <div key={p.percentile} className="p-3 rounded-xl bg-[#0A0D14] border border-slate-800 text-center shadow-xs">
-                          <div className="text-[10px] font-mono text-slate-400 uppercase font-bold">{p.percentile}</div>
-                          <div className="text-base font-mono font-black text-slate-100 mt-0.5">
-                            {p.value.toFixed(1)} <span className="text-xs text-slate-500 font-normal">ms</span>
+                      {autocannonResult.percentiles.map((p) => {
+                        const metricKey = 
+                          p.percentile === 'p99' ? 'p99' :
+                          p.percentile === 'p90' ? 'p90' :
+                          p.percentile === 'p50' ? 'p50' :
+                          p.percentile === 'p99_9' || p.percentile === 'p99.9' ? 'p99_9' :
+                          'avg_latency';
+
+                        return (
+                          <div key={p.percentile} className="p-3 rounded-xl bg-[#0A0D14] border border-slate-800 text-center shadow-xs">
+                            <div className="text-[10px] font-mono text-slate-400 uppercase font-bold flex items-center justify-center gap-1">
+                              <span>{p.percentile}</span>
+                              <MetricInfoTooltip metric={metricKey as any} size={10} />
+                            </div>
+                            <div className="text-base font-mono font-black text-slate-100 mt-0.5">
+                              {p.value.toFixed(1)} <span className="text-xs text-slate-500 font-normal">ms</span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}

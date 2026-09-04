@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Terminal, Plus, ChevronLeft, Layers, Sliders, History, Menu, Zap, Gauge, Sparkles } from 'lucide-react';
+import { Terminal, Plus, ChevronLeft, Layers, Sliders, History, Menu, Zap, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AppView } from '../types';
 
@@ -51,15 +51,6 @@ export function WorkspaceSidebar({
       icon: Terminal,
       accentColor: 'text-emerald-400',
       badgeBg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-    },
-    { 
-      key: 'autocannon', 
-      label: 'AUTOCANNON', 
-      badge: 'BENCHMARK',
-      sublabel: 'High-Concurrency Socket Load',
-      icon: Gauge,
-      accentColor: 'text-amber-400',
-      badgeBg: 'bg-amber-500/10 text-amber-400 border-amber-500/30'
     },
     { 
       key: 'suites', 
@@ -159,7 +150,6 @@ export function WorkspaceSidebar({
               {isActive && (
                 <span className={cn(
                   "absolute left-0 top-1 bottom-1 w-1.5 rounded-r-full shadow-sm",
-                  item.key === 'autocannon' ? "bg-amber-400 shadow-amber-400/50" :
                   item.key === 'suites' ? "bg-cyan-400 shadow-cyan-400/50" :
                   item.key === 'variables' ? "bg-blue-400 shadow-blue-400/50" :
                   item.key === 'history' ? "bg-purple-400 shadow-purple-400/50" :

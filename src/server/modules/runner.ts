@@ -1,4 +1,7 @@
 import { CurlEngine, RequestConfig, CurlResult } from './curl-engine';
+import { interpolateVariables } from '../../features/api-tester/utils/interpolation';
+
+// --- (rest of file)
 
 export interface BatchConfig {
   request?: RequestConfig;
@@ -100,6 +103,21 @@ export class RequestRunner {
           if (index === undefined) break;
 
           let finalRequest = requests ? { ...requests[index] } : { ...request! };
+          
+          // --- Server-side Interpolation for Dynamic Vars ($randomUUID, $iteration, etc.) ---
+          if (finalRequest.url) {
+            finalRequest.url = interpolateVariables(finalRequest.url, {}, { iteration: index + 1 });
+          }
+          if (finalRequest.body) {
+            finalRequest.body = interpolateVariables(finalRequest.body, {}, { iteration: index + 1 });
+          }
+          if (finalRequest.headers) {
+            const interpolatedHeaders: Record<string, string> = {};
+            for (const [k, v] of Object.entries(finalRequest.headers)) {
+              interpolatedHeaders[k] = interpolateVariables(v, {}, { iteration: index + 1 });
+            }
+            finalRequest.headers = interpolatedHeaders;
+          }
 
           // --- Module-Specific Instrumentation ---
 

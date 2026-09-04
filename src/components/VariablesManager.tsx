@@ -1,99 +1,689 @@
-import React from 'react';
-import { Plus, X, Box, Info } from 'lucide-react';
+import React, { useState } from 'react';
+import { 
+  Plus, X, Box, Info, ShieldAlert, Eye, EyeOff, 
+  Copy, Check, Download, Globe, Server, Sparkles
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-export interface EnvVar {
-  key: string;
-  value: string;
-}
+import { Environment, EnvironmentVariable } from '@/features/api-tester/types';
 
 interface VariablesManagerProps {
+  environments?: Environment[];
+  activeEnvironmentId?: string;
+  onSelectEnvironment?: (id: string) => void;
+  onSaveEnvironment?: (env: Environment) => void;
+  onDeleteEnvironment?: (id: string) => void;
   variables: Record<string, string>;
   onVariablesChange: (variables: Record<string, string>) => void;
+  theme?: 'dark' | 'light';
 }
 
-export function VariablesManager({ variables, onVariablesChange }: VariablesManagerProps) {
-  const addVar = () => {
-    onVariablesChange({ ...variables, '': '' });
-  };
+const DEFAULT_ENVIRONMENTS: Environment[] = [
+  {
+    id: 'env-local',
+    name: 'Local',
+    type: 'local',
+    isProduction: false,
+    baseUrl: 'http://localhost:3000',
+    variables: [
+      { id: 'v1', key: 'BASE_URL', value: 'http://localhost:3000', enabled: true },
+      { id: 'v2', key: 'API_KEY', value: 'local_dev_secret_84920', isSecret: true, enabled: true },
+      { id: 'v3', key: 'USER_ID', value: 'usr_dev_42', enabled: true }
+    ]
+  },
+  {
+    id: 'env-dev',
+    name: 'Development',
+    type: 'dev',
+    isProduction: false,
+    baseUrl: 'https://dev-api.example.com',
+    variables: [
+      { id: 'v4', key: 'BASE_URL', value: 'https://dev-api.example.com', enabled: true },
+      { id: 'v5', key: 'AUTH_TOKEN', value: 'bearer_dev_jwt_99182', isSecret: true, enabled: true },
+      { id: 'v6', key: 'CLIENT_ID', value: 'client_dev_app', enabled: true }
+    ]
+  },
+  {
+    id: 'env-staging',
+    name: 'Staging',
+    type: 'staging',
+    isProduction: false,
+    baseUrl: 'https://staging-api.example.com',
+    variables: [
+      { id: 'v7', key: 'BASE_URL', value: 'https://staging-api.example.com', enabled: true },
+      { id: 'v8', key: 'API_KEY', value: 'staging_sec_key_443', isSecret: true, enabled: true }
+    ]
+  },
+  {
+    id: 'env-production',
+    name: 'Production',
+    type: 'production',
+    isProduction: true,
+    baseUrl: 'https://api.example.com',
+    variables: [
+      { id: 'v9', key: 'BASE_URL', value: 'https://api.example.com', enabled: true },
+      { id: 'v10', key: 'API_KEY', value: 'prod_live_sec_token_9901', isSecret: true, enabled: true }
+    ]
+  }
+];
 
-  const updateVar = (oldKey: string, newKey: string, value: string) => {
-    const next = { ...variables };
-    if (oldKey !== newKey) {
-      delete next[oldKey];
+const MOCK_GENERATORS = [
+  { tag: '{{$randomUUID}}', desc: 'Random v4 UUID string' },
+  { tag: '{{$timestamp}}', desc: 'Current UNIX timestamp in ms' },
+  { tag: '{{$randomEmail}}', desc: 'Random dummy email address' },
+  { tag: '{{$randomInt}}', desc: 'Random integer (1-1000)' },
+  { tag: '{{$isoTimestamp}}', desc: 'ISO 8601 UTC date string' },
+  { tag: '{{$randomPhone}}', desc: 'Formatted phone number' },
+];
+
+export function VariablesManager({
+  environments = DEFAULT_ENVIRONMENTS,
+  activeEnvironmentId = 'env-local',
+  onSelectEnvironment,
+  onVariablesChange,
+  theme = 'dark'
+}: VariablesManagerProps) {
+  const isLight = theme === 'light';
+
+  const [envs, setEnvs] = useState<Environment[]>(() => {
+    const saved = localStorage.getItem('hypercurl_environments_v2');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
     }
-    next[newKey] = value;
-    onVariablesChange(next);
+    return environments;
+  });
+
+  const [activeEnvId, setActiveEnvId] = useState<string>(() => {
+    return localStorage.getItem('hypercurl_active_env_id') || activeEnvironmentId;
+  });
+
+  const [showSecretMap, setShowSecretMap] = useState<Record<string, boolean>>({});
+  const [copiedTag, setCopiedTag] = useState<string | null>(null);
+  const [isCreatingEnv, setIsCreatingEnv] = useState(false);
+  const [newEnvName, setNewEnvName] = useState('');
+  const [newEnvIsProd, setNewEnvIsProd] = useState(false);
+
+  const activeEnv = envs.find(e => e.id === activeEnvId) || envs[0] || DEFAULT_ENVIRONMENTS[0];
+
+  const persistEnvs = (nextEnvs: Environment[]) => {
+    setEnvs(nextEnvs);
+    localStorage.setItem('hypercurl_environments_v2', JSON.stringify(nextEnvs));
+    // Sync active environment variables to active variables map
+    const active = nextEnvs.find(e => e.id === activeEnvId);
+    if (active) {
+      const flatVars: Record<string, string> = {};
+      active.variables.forEach(v => {
+        if (v.enabled !== false && v.key.trim()) {
+          flatVars[v.key.trim()] = v.value;
+        }
+      });
+      onVariablesChange(flatVars);
+    }
   };
 
-  const removeVar = (key: string) => {
-    const next = { ...variables };
-    delete next[key];
-    onVariablesChange(next);
+  const handleSelectEnv = (id: string) => {
+    setActiveEnvId(id);
+    localStorage.setItem('hypercurl_active_env_id', id);
+    if (onSelectEnvironment) onSelectEnvironment(id);
+
+    const targetEnv = envs.find(e => e.id === id);
+    if (targetEnv) {
+      const flatVars: Record<string, string> = {};
+      targetEnv.variables.forEach(v => {
+        if (v.enabled !== false && v.key.trim()) {
+          flatVars[v.key.trim()] = v.value;
+        }
+      });
+      onVariablesChange(flatVars);
+    }
+  };
+
+  const addVariable = () => {
+    const newVar: EnvironmentVariable = {
+      id: Math.random().toString(36).substring(7),
+      key: '',
+      value: '',
+      enabled: true,
+      isSecret: false
+    };
+    const nextEnvs = envs.map(e => {
+      if (e.id === activeEnv.id) {
+        return { ...e, variables: [...e.variables, newVar] };
+      }
+      return e;
+    });
+    persistEnvs(nextEnvs);
+  };
+
+  const updateVariable = (varId: string, updates: Partial<EnvironmentVariable>) => {
+    const nextEnvs = envs.map(e => {
+      if (e.id === activeEnv.id) {
+        return {
+          ...e,
+          variables: e.variables.map(v => v.id === varId ? { ...v, ...updates } : v)
+        };
+      }
+      return e;
+    });
+    persistEnvs(nextEnvs);
+  };
+
+  const removeVariable = (varId: string) => {
+    const nextEnvs = envs.map(e => {
+      if (e.id === activeEnv.id) {
+        return {
+          ...e,
+          variables: e.variables.filter(v => v.id !== varId)
+        };
+      }
+      return e;
+    });
+    persistEnvs(nextEnvs);
+  };
+
+  const handleCreateEnvironment = () => {
+    if (!newEnvName.trim()) return;
+    const newEnv: Environment = {
+      id: `env-${Date.now()}`,
+      name: newEnvName.trim(),
+      type: newEnvIsProd ? 'production' : 'custom',
+      isProduction: newEnvIsProd,
+      variables: [
+        { id: 'v1', key: 'BASE_URL', value: 'https://api.example.com', enabled: true }
+      ]
+    };
+    const nextEnvs = [...envs, newEnv];
+    persistEnvs(nextEnvs);
+    handleSelectEnv(newEnv.id);
+    setNewEnvName('');
+    setNewEnvIsProd(false);
+    setIsCreatingEnv(false);
+  };
+
+  const exportEnvironmentsJson = () => {
+    const jsonStr = JSON.stringify(envs, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `hypercurl_environments_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCopyTag = (tag: string) => {
+    navigator.clipboard.writeText(tag);
+    setCopiedTag(tag);
+    setTimeout(() => setCopiedTag(null), 1800);
   };
 
   return (
     <div className="flex flex-col h-full gap-5">
-      <div className="flex items-center justify-between pb-2 border-b border-slate-800/60">
-        <div className="flex flex-col">
-          <h2 className="text-base font-black text-white font-mono tracking-widest uppercase flex items-center gap-2">
-            <Box size={16} className="text-emerald-450 animate-pulse" /> Global_Environments
+      {/* Header Section */}
+      <div className={cn(
+        "flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b gap-4",
+        isLight ? "border-slate-300" : "border-slate-800/80"
+      )}>
+        <div>
+          <h2 className={cn(
+            "text-base font-black font-mono tracking-wider flex items-center gap-2.5 uppercase",
+            isLight ? "text-slate-900" : "text-white"
+          )}>
+            <Box size={20} className={isLight ? "text-emerald-700 stroke-[2.5]" : "text-emerald-400"} />
+            <span>Environment &amp; Scoped Variables</span>
           </h2>
-          <span className="text-xs text-slate-400 font-sans mt-1.5 leading-relaxed">
-            Reference variables securely across URL, Headers, and Payloads using the <span className="text-emerald-400 font-mono font-bold">{"{{KEY}}"}</span> syntax.
-          </span>
+          <p className={cn(
+            "text-xs font-sans mt-1 leading-relaxed",
+            isLight ? "text-slate-600 font-medium" : "text-slate-400"
+          )}>
+            Scoped variables, secret masking, and instant interpolation across requests &amp; test suites using{' '}
+            <span className={cn(
+              "px-1.5 py-0.5 rounded font-mono font-bold text-xs inline-block",
+              isLight 
+                ? "bg-emerald-100 text-emerald-900 border border-emerald-300" 
+                : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+            )}>
+              {"{{VARIABLE_NAME}}"}
+            </span>.
+          </p>
         </div>
-        <button 
-          onClick={addVar} 
-          className="bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase px-4.5 py-2.5 rounded-lg tracking-wider flex items-center gap-2 transition-all cursor-pointer select-none shadow-lg shadow-emerald-950/20 active:scale-95 border border-emerald-555"
-        >
-          <Plus size={15} /> Add_Var
-        </button>
+
+        {/* Action Buttons: Export JSON & Create Environment */}
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={exportEnvironmentsJson}
+            title="Export all environments as a JSON file"
+            className={cn(
+              "px-4 py-2 rounded-xl font-mono font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-xs hover:shadow active:scale-95 whitespace-nowrap border",
+              isLight 
+                ? "bg-white hover:bg-slate-50 text-slate-800 border-slate-300 hover:border-slate-400 shadow-slate-200" 
+                : "bg-slate-900 hover:bg-slate-850 text-slate-200 border-slate-700/80 hover:border-slate-600"
+            )}
+          >
+            <Download size={14} className={isLight ? "text-sky-700 stroke-[2.5]" : "text-sky-400 stroke-[2.5]"} />
+            <span>Export Environments (.json)</span>
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => setIsCreatingEnv(true)}
+            title="Create a new environment scope"
+            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs flex items-center gap-2 transition-all shadow-sm hover:shadow-md active:scale-95 cursor-pointer border border-emerald-700 whitespace-nowrap ring-1 ring-emerald-500/30"
+          >
+            <Plus size={15} className="stroke-[2.5]" />
+            <span>+ New Environment</span>
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1 card-slate p-5 overflow-y-auto space-y-3.5 custom-scrollbar bg-black/40 border border-slate-800/80 rounded-xl">
-        {Object.entries(variables).length === 0 ? (
-          <div className="text-center py-24 text-slate-500 font-mono text-sm italic tracking-wide">
-            NO_ACTIVE_ENVIRONMENT_VARIABLES_DEFINED
+      {/* Environment Selector Bar (Pills) */}
+      <div className="flex items-center gap-2.5 overflow-x-auto pb-1.5 custom-scrollbar">
+        {envs.map(env => {
+          const isActive = env.id === activeEnv.id;
+          return (
+            <button
+              key={env.id}
+              onClick={() => handleSelectEnv(env.id)}
+              className={cn(
+                "px-4 py-2.5 rounded-xl text-xs font-mono font-bold flex items-center gap-2.5 transition-all cursor-pointer border shrink-0 select-none",
+                isActive 
+                  ? isLight
+                    ? "bg-white text-slate-900 border-2 border-emerald-600 shadow-md ring-2 ring-emerald-500/20"
+                    : "bg-slate-800 text-white border-2 border-emerald-500 shadow-lg ring-2 ring-emerald-500/30"
+                  : isLight
+                    ? "bg-slate-100 text-slate-700 border-slate-300 hover:text-slate-950 hover:bg-slate-200 hover:border-slate-400"
+                    : "bg-slate-950/70 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-900 hover:border-slate-700"
+              )}
+            >
+              {env.isProduction ? (
+                <ShieldAlert size={15} className={cn("shrink-0", isLight ? "text-rose-700" : "text-rose-400 animate-pulse")} />
+              ) : (
+                <Server size={15} className={cn("shrink-0", isActive ? (isLight ? "text-emerald-700" : "text-emerald-400") : (isLight ? "text-slate-500" : "text-sky-400"))} />
+              )}
+              <span className="font-bold">{env.name}</span>
+              {env.isProduction && (
+                <span className={cn(
+                  "text-[9.5px] px-1.5 py-0.5 rounded font-black uppercase tracking-wider border",
+                  isLight 
+                    ? "bg-rose-100 text-rose-900 border-rose-300" 
+                    : "bg-rose-950/80 text-rose-300 border-rose-700/80"
+                )}>
+                  PROD
+                </span>
+              )}
+              <span className={cn(
+                "text-[10px] px-2 py-0.5 rounded-full font-mono font-bold border",
+                isActive 
+                  ? isLight
+                    ? "bg-emerald-100 text-emerald-950 border-emerald-300"
+                    : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                  : isLight
+                    ? "bg-slate-200 text-slate-800 border-slate-300"
+                    : "bg-slate-800/80 text-slate-400 border-slate-700/60"
+              )}>
+                {env.variables.length}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Production Warning Banner */}
+      {activeEnv.isProduction && (
+        <div className={cn(
+          "p-4 rounded-xl flex items-start gap-3.5 text-xs font-mono shadow-xs border-2",
+          isLight 
+            ? "bg-rose-50 border-rose-300 text-rose-950" 
+            : "bg-rose-950/30 border-rose-800/80 text-rose-200"
+        )}>
+          <ShieldAlert size={20} className={isLight ? "text-rose-700 shrink-0 mt-0.5" : "text-rose-400 shrink-0 mt-0.5"} />
+          <div className="space-y-1">
+            <div className={cn(
+              "font-bold uppercase tracking-wider flex items-center gap-2",
+              isLight ? "text-rose-900" : "text-rose-300"
+            )}>
+              <span className="text-xs font-black">Active Scope: PRODUCTION</span>
+              <span className={cn(
+                "text-[9.5px] px-2 py-0.5 rounded font-black tracking-wider text-white",
+                isLight ? "bg-rose-700" : "bg-rose-900"
+              )}>
+                RESTRICTED
+              </span>
+            </div>
+            <div className={cn(
+              "font-medium text-[11.5px] leading-relaxed",
+              isLight ? "text-rose-900 font-sans" : "text-rose-300/90 font-mono"
+            )}>
+              Production safety guardrails are active. Autocannon high-load benchmarks will require explicit confirmation before sending socket bursts.
+            </div>
           </div>
-        ) : (
-          (Object.entries(variables) as [string, string][]).map(([key, value], idx) => (
-            <div key={idx} className="flex gap-2 sm:gap-3 items-center group animate-fadeIn w-full border-b border-slate-900/40 pb-3 last:border-none last:pb-0 sm:border-none sm:pb-0">
-              <div className="flex-1 flex flex-col sm:flex-row gap-2">
-                <input
-                  value={key}
-                  onChange={(e) => updateVar(key, e.target.value, value)}
-                  placeholder="VARIABLE_NAME"
-                  className="w-full sm:flex-1 border border-slate-800 bg-slate-900/60 px-4 py-2 rounded-lg focus:border-emerald-500/50 outline-none transition-all text-emerald-400 font-mono text-xs sm:text-sm font-semibold tracking-wide"
-                />
-                <input
-                  value={value}
-                  onChange={(e) => updateVar(key, key, e.target.value)}
-                  placeholder="Value"
-                  className="w-full sm:flex-1 border border-slate-800 bg-slate-900/60 px-4 py-2 rounded-lg focus:border-emerald-500/50 outline-none transition-all text-slate-100 font-mono text-xs sm:text-sm font-medium"
-                />
-              </div>
+        </div>
+      )}
+
+      {/* Variables Table Card */}
+      <div className={cn(
+        "p-5 rounded-2xl flex flex-col gap-4 shadow-sm border",
+        isLight 
+          ? "bg-white border-slate-300" 
+          : "bg-[#0A0D15] border-slate-800/90"
+      )}>
+        {/* Table Top Bar */}
+        <div className={cn(
+          "flex items-center justify-between pb-3.5 border-b text-xs font-mono",
+          isLight ? "border-slate-250" : "border-slate-800/70"
+        )}>
+          <div className="flex items-center gap-2.5 font-bold uppercase tracking-wider">
+            <Globe size={16} className={isLight ? "text-emerald-700 stroke-[2.5]" : "text-emerald-400"} />
+            <span className={cn(
+              "font-extrabold text-xs",
+              isLight ? "text-slate-900" : "text-slate-100"
+            )}>
+              {activeEnv.name} Scoped Variables
+            </span>
+            <span className={cn(
+              "text-[11px] px-2.5 py-0.5 rounded-full font-mono font-bold border",
+              isLight 
+                ? "bg-slate-100 text-slate-800 border-slate-300" 
+                : "bg-slate-800 text-slate-300 border-slate-700"
+            )}>
+              {activeEnv.variables.length} {activeEnv.variables.length === 1 ? 'entry' : 'entries'}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={addVariable}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold font-mono rounded-xl border border-emerald-700 flex items-center gap-2 transition-all shadow-xs active:scale-95 cursor-pointer whitespace-nowrap"
+          >
+            <Plus size={14} className="stroke-[2.5]" />
+            <span>Add Variable</span>
+          </button>
+        </div>
+
+        {/* Variable Rows */}
+        <div className="space-y-3 max-h-[440px] overflow-y-auto custom-scrollbar pr-1">
+          {activeEnv.variables.length === 0 ? (
+            <div className={cn(
+              "text-center py-12 font-mono text-xs italic flex flex-col items-center gap-2",
+              isLight ? "text-slate-500" : "text-slate-400"
+            )}>
+              <Box size={28} className={isLight ? "text-slate-400 stroke-[1.5]" : "text-slate-600 stroke-[1.5]"} />
+              <span className="font-sans font-medium text-sm">No variables defined in {activeEnv.name}.</span>
+              <span className="text-xs">Click <strong className="font-mono text-emerald-600 font-bold">"Add Variable"</strong> above to add key-value pairs.</span>
+            </div>
+          ) : (
+            activeEnv.variables.map(v => {
+              const isMasked = v.isSecret && !showSecretMap[v.id];
+              return (
+                <div 
+                  key={v.id} 
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-xl transition-all border shadow-2xs",
+                    isLight 
+                      ? "bg-slate-50 hover:bg-slate-100/80 border-slate-300" 
+                      : "bg-[#0E131F] hover:bg-[#131929] border-slate-800/90"
+                  )}
+                >
+                  {/* Enabled Checkbox */}
+                  <input
+                    type="checkbox"
+                    checked={v.enabled !== false}
+                    onChange={(e) => updateVariable(v.id, { enabled: e.target.checked })}
+                    className="w-4 h-4 accent-emerald-600 rounded cursor-pointer shrink-0"
+                    title="Enable or disable variable interpolation"
+                  />
+
+                  {/* Variable Key Input */}
+                  <div className="w-1/3 min-w-[150px] relative">
+                    <input
+                      value={v.key}
+                      onChange={(e) => updateVariable(v.id, { key: e.target.value })}
+                      placeholder="VARIABLE_NAME"
+                      className={cn(
+                        "w-full px-3.5 py-2 rounded-lg text-xs font-mono font-bold outline-none transition-all border",
+                        isLight 
+                          ? "bg-white border-slate-300 text-emerald-800 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 placeholder:text-slate-400 shadow-2xs" 
+                          : "bg-slate-900 border-slate-800 text-emerald-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/25 placeholder:text-slate-600"
+                      )}
+                    />
+                  </div>
+
+                  {/* Variable Value Input */}
+                  <div className="flex-1 relative flex items-center">
+                    <input
+                      type={isMasked ? 'password' : 'text'}
+                      value={v.value}
+                      onChange={(e) => updateVariable(v.id, { value: e.target.value })}
+                      placeholder="Value"
+                      className={cn(
+                        "w-full px-3.5 py-2 rounded-lg text-xs font-mono outline-none pr-24 transition-all border",
+                        isLight 
+                          ? "bg-white border-slate-300 text-slate-900 font-medium focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 placeholder:text-slate-400 shadow-2xs" 
+                          : "bg-slate-900 border-slate-800 text-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/25 placeholder:text-slate-600",
+                        v.isSecret && (isLight ? "text-amber-900 font-semibold" : "text-amber-300 font-semibold")
+                      )}
+                    />
+                    <div className="absolute right-2 flex items-center gap-1.5">
+                      {v.isSecret && (
+                        <button
+                          type="button"
+                          onClick={() => setShowSecretMap(prev => ({ ...prev, [v.id]: !prev[v.id] }))}
+                          className={cn(
+                            "p-1.5 rounded transition-colors cursor-pointer",
+                            isLight 
+                              ? "text-slate-600 hover:text-slate-950 hover:bg-slate-200" 
+                              : "text-slate-400 hover:text-white hover:bg-slate-800"
+                          )}
+                          title={isMasked ? "Reveal secret" : "Mask secret"}
+                        >
+                          {isMasked ? <Eye size={14} /> : <EyeOff size={14} />}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => updateVariable(v.id, { isSecret: !v.isSecret })}
+                        className={cn(
+                          "px-2.5 py-1 rounded text-[10px] font-mono font-bold uppercase transition-all cursor-pointer shadow-2xs border",
+                          v.isSecret 
+                            ? isLight
+                              ? "bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200" 
+                              : "bg-amber-950/90 text-amber-300 border-amber-800 hover:bg-amber-900"
+                            : isLight
+                              ? "bg-slate-200/90 text-slate-800 border-slate-300 hover:bg-slate-300"
+                              : "bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700"
+                        )}
+                        title="Toggle secret masking"
+                      >
+                        {v.isSecret ? "SECRET" : "RAW"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Delete Variable Button */}
+                  <button
+                    type="button"
+                    onClick={() => removeVariable(v.id)}
+                    className={cn(
+                      "p-2 rounded-lg transition-colors cursor-pointer shrink-0",
+                      isLight 
+                        ? "text-slate-400 hover:text-rose-700 hover:bg-rose-50" 
+                        : "text-slate-400 hover:text-rose-400 hover:bg-rose-500/10"
+                    )}
+                    title="Delete variable"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* Dynamic Mock Variables Helper Guide */}
+      <div className={cn(
+        "p-4.5 rounded-2xl flex gap-4 items-start shadow-xs border",
+        isLight 
+          ? "bg-sky-50/90 border-sky-300/80 text-sky-950" 
+          : "bg-cyan-950/20 border-cyan-500/30 text-slate-300"
+      )}>
+        <Sparkles size={20} className={isLight ? "text-sky-700 shrink-0 mt-0.5 stroke-[2.5]" : "text-cyan-400 shrink-0 mt-0.5"} />
+        <div className="space-y-2.5 w-full">
+          <div className={cn(
+            "text-xs font-black uppercase font-mono tracking-wider flex items-center justify-between",
+            isLight ? "text-sky-950" : "text-cyan-400"
+          )}>
+            <span>Live Dynamic Mock Generators Supported</span>
+            <span className={cn(
+              "text-[10px] font-sans font-medium px-2 py-0.5 rounded-full border",
+              isLight ? "bg-sky-100 text-sky-800 border-sky-300" : "bg-cyan-950 text-cyan-300 border-cyan-800"
+            )}>
+              Click tag to copy
+            </span>
+          </div>
+          
+          <p className={cn(
+            "text-xs leading-relaxed font-sans",
+            isLight ? "text-slate-700 font-medium" : "text-slate-300"
+          )}>
+            HyperCurl supports dynamic evaluation tags in real-time. Use them anywhere in request URLs, headers, queries, or JSON payloads:
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+            {MOCK_GENERATORS.map(({ tag, desc }) => {
+              const isCopied = copiedTag === tag;
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => handleCopyTag(tag)}
+                  className={cn(
+                    "px-3 py-2 rounded-xl text-left font-mono text-xs flex items-center justify-between gap-2 border transition-all cursor-pointer shadow-2xs group active:scale-98",
+                    isLight 
+                      ? "bg-white hover:bg-sky-50 text-sky-950 border-sky-300 hover:border-sky-400 shadow-sky-100" 
+                      : "bg-slate-900/90 hover:bg-slate-850 text-cyan-300 border-cyan-500/30 hover:border-cyan-400/60"
+                  )}
+                >
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-bold tracking-tight truncate">{tag}</span>
+                    <span className={cn(
+                      "text-[10px] font-sans truncate font-normal mt-0.5",
+                      isLight ? "text-slate-600" : "text-slate-400"
+                    )}>
+                      {desc}
+                    </span>
+                  </div>
+                  <div className="shrink-0 p-1">
+                    {isCopied ? (
+                      <Check size={14} className={isLight ? "text-emerald-700 stroke-[3]" : "text-emerald-400 stroke-[3]"} />
+                    ) : (
+                      <Copy size={13} className={cn("opacity-60 group-hover:opacity-100 transition-opacity", isLight ? "text-slate-600" : "text-slate-400")} />
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Modal for Creating New Environment */}
+      {isCreatingEnv && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className={cn(
+            "rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-mono border",
+            isLight 
+              ? "bg-white border-slate-300 text-slate-900" 
+              : "bg-[#0F131D] border-slate-800 text-white"
+          )}>
+            <div className={cn(
+              "flex items-center justify-between border-b pb-3",
+              isLight ? "border-slate-250" : "border-slate-800"
+            )}>
+              <h3 className="text-sm font-bold uppercase tracking-wider flex items-center gap-2">
+                <Server size={16} className="text-emerald-600" />
+                <span>Create New Environment</span>
+              </h3>
               <button 
-                onClick={() => removeVar(key)}
-                className="text-slate-500 hover:text-rose-500 transition-colors p-2 hover:bg-slate-900/50 rounded-lg border border-transparent hover:border-slate-800/50 self-end sm:self-center shrink-0 mb-1 sm:mb-0"
-                title="Remove variable"
+                type="button"
+                onClick={() => setIsCreatingEnv(false)} 
+                className={cn(
+                  "p-1 rounded-lg transition-colors cursor-pointer",
+                  isLight ? "text-slate-500 hover:bg-slate-100 hover:text-slate-900" : "text-slate-400 hover:text-white hover:bg-slate-800"
+                )}
               >
                 <X size={16} />
               </button>
             </div>
-          ))
-        )}
-      </div>
 
-      <div className="p-4 bg-blue-950/20 border border-blue-500/25 rounded-xl flex gap-3 items-start">
-         <Info size={18} className="text-blue-400 shrink-0 mt-0.5" />
-         <div className="space-y-1">
-           <span className="text-[10px] font-black uppercase text-blue-400 font-mono block tracking-wider">VARIABLE_RESOLUTION_ENGINE</span>
-           <p className="text-xs text-slate-350 leading-relaxed font-sans">
-              Variables are automatically resolved client-side at submission. You can construct nested endpoints or populate common credentials: e.g. <span className="text-emerald-400 font-mono font-bold">{"{{BASE_URL}}"}/v1/users</span> or auth headers referencing <span className="text-emerald-400 font-mono font-bold">{"{{API_TOKEN}}"}</span> keys securely.
-           </p>
-         </div>
-      </div>
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className={cn("block mb-1.5 font-bold", isLight ? "text-slate-800" : "text-slate-300")}>
+                  Environment Name
+                </label>
+                <input
+                  value={newEnvName}
+                  onChange={(e) => setNewEnvName(e.target.value)}
+                  placeholder="e.g. QA-Staging-2, UAT-Cluster"
+                  className={cn(
+                    "w-full px-3.5 py-2.5 rounded-xl outline-none font-mono text-xs border transition-all",
+                    isLight 
+                      ? "bg-slate-50 border-slate-300 text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 placeholder:text-slate-400" 
+                      : "bg-slate-900 border-slate-800 text-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/25 placeholder:text-slate-600"
+                  )}
+                  autoFocus
+                />
+              </div>
+
+              <div className={cn(
+                "p-3 rounded-xl border flex items-start gap-2.5",
+                isLight ? "bg-slate-50 border-slate-300" : "bg-slate-900/60 border-slate-800"
+              )}>
+                <input
+                  type="checkbox"
+                  id="prod-check"
+                  checked={newEnvIsProd}
+                  onChange={(e) => setNewEnvIsProd(e.target.checked)}
+                  className="w-4 h-4 accent-rose-600 rounded cursor-pointer mt-0.5 shrink-0"
+                />
+                <label htmlFor="prod-check" className={cn("cursor-pointer select-none font-sans text-xs", isLight ? "text-slate-800 font-medium" : "text-slate-300")}>
+                  <strong className="block font-mono text-[11px] font-bold text-rose-600">Mark as Production Scope</strong>
+                  Enforces confirmation dialogs prior to executing aggressive load test runs.
+                </label>
+              </div>
+            </div>
+
+            <div className={cn(
+              "flex justify-end gap-2.5 pt-3 border-t",
+              isLight ? "border-slate-250" : "border-slate-800"
+            )}>
+              <button
+                type="button"
+                onClick={() => setIsCreatingEnv(false)}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer border transition-colors",
+                  isLight 
+                    ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300" 
+                    : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
+                )}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateEnvironment}
+                className="px-4.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold font-mono text-xs cursor-pointer shadow-sm active:scale-95 transition-all border border-emerald-700"
+              >
+                Save Environment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

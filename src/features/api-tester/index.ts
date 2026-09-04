@@ -13,3 +13,4 @@ export * from './types';
 export { ResponseViewer } from './components/ResponseViewer';
 export { AutocannonBenchmarkView } from './components/AutocannonBenchmarkView';
 export { BatchViewer } from './components/BatchViewer';
+export { MetricInfoTooltip, METRIC_DEFINITIONS } from './components/MetricInfoTooltip';

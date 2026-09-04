@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 import { CurlResult } from '@/server/modules/curl-engine';
 import { JsonInteractiveNode } from './JsonInteractiveNode';
 import { CliCommandModal } from './CliCommandModal';
+import { renderTextWithLinks } from '../utils/linkUtils';
 
 export type ResponseViewMode = 'body' | 'raw' | 'headers';
 
@@ -608,8 +609,8 @@ export function ResponseViewer({
                 </div>
               </div>
             ) : (
-              <div className="bg-[#0B0E17] border border-slate-850 rounded-xl p-4 overflow-x-auto shadow-inner text-xs text-slate-300 whitespace-pre-wrap leading-relaxed resp-raw-card">
-                {result.body || '<EMPTY BODY>'}
+              <div className="bg-[#0B0E17] border border-slate-850 rounded-xl p-4 overflow-x-auto shadow-inner text-xs text-slate-300 whitespace-pre-wrap leading-relaxed resp-raw-card select-text">
+                {result.body ? renderTextWithLinks(result.body) : '<EMPTY BODY>'}
               </div>
             )}
           </div>
@@ -632,10 +633,10 @@ export function ResponseViewer({
               </button>
             </div>
             <pre className={cn(
-              "bg-[#0B0E17] border border-slate-850 rounded-xl p-4 text-xs text-emerald-300/90 font-mono shadow-inner overflow-x-auto leading-relaxed resp-raw-pre",
+              "bg-[#0B0E17] border border-slate-850 rounded-xl p-4 text-xs text-emerald-300/90 font-mono shadow-inner overflow-x-auto leading-relaxed resp-raw-pre select-text",
               wrapText ? "whitespace-pre-wrap break-all" : "whitespace-pre"
             )}>
-              {result.body || '<EMPTY RESPONSE BODY>'}
+              {result.body ? renderTextWithLinks(result.body) : '<EMPTY RESPONSE BODY>'}
             </pre>
           </div>
         )}
@@ -669,7 +670,9 @@ export function ResponseViewer({
                   Object.entries(result.headers).map(([k, v], idx) => (
                     <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 px-3 hover:bg-[#0F1420] transition-colors gap-1 sm:gap-4 resp-header-row">
                       <span className="text-sky-400 font-bold shrink-0 resp-header-key">{k}:</span>
-                      <span className="text-slate-300 font-mono break-all sm:text-right resp-header-val">{v}</span>
+                      <span className="text-slate-300 font-mono break-all sm:text-right resp-header-val">
+                        {renderTextWithLinks(String(v))}
+                      </span>
                     </div>
                   ))
                 )}
@@ -693,7 +696,9 @@ export function ResponseViewer({
                     {Object.entries(result.config.headers).map(([k, v], idx) => (
                       <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 px-3 hover:bg-[#0E121C] gap-1 sm:gap-4 resp-req-header-row">
                         <span className="text-amber-400 font-bold shrink-0 resp-req-header-key">{k}:</span>
-                        <span className="text-slate-400 font-mono break-all sm:text-right resp-req-header-val">{v}</span>
+                        <span className="text-slate-400 font-mono break-all sm:text-right resp-req-header-val">
+                          {renderTextWithLinks(String(v))}
+                        </span>
                       </div>
                     ))}
                   </div>

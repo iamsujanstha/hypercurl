@@ -19,9 +19,12 @@ const FIRST_NAMES = ['alex', 'jordan', 'taylor', 'morgan', 'casey', 'sam', 'rile
 const LAST_NAMES = ['chen', 'smith', 'patel', 'kumar', 'miller', 'rossi', 'garcia', 'novak', 'tanaka', 'dubois'];
 const DOMAINS = ['example.com', 'hypercurl.test', 'qa-benchmark.org', 'test-api.io'];
 
-export function generateDynamicMockValue(key: string): string | null {
+export function generateDynamicMockValue(key: string, context?: { iteration?: number }): string | null {
   const normalized = key.toLowerCase();
   
+  if (normalized === '$iteration' && context?.iteration !== undefined) {
+    return context.iteration.toString();
+  }
   if (normalized === '$randomuuid' || normalized === '$guid') {
     return uuidv4();
   }
@@ -61,7 +64,8 @@ export function generateDynamicMockValue(key: string): string | null {
 
 export function interpolateVariables(
   template: string,
-  variables: Record<string, string> = {}
+  variables: Record<string, string> = {},
+  context?: { iteration?: number, preserveDynamic?: boolean }
 ): string {
   if (!template || typeof template !== 'string') return template || '';
 
@@ -71,7 +75,10 @@ export function interpolateVariables(
 
     // 1. Check for dynamic mock generators (e.g. {{$randomUUID}})
     if (key.startsWith('$')) {
-      const dynamicVal = generateDynamicMockValue(key);
+      if (context?.preserveDynamic) {
+        return match; // Leave untouched for server to resolve later
+      }
+      const dynamicVal = generateDynamicMockValue(key, context);
       if (dynamicVal !== null) {
         return dynamicVal;
       }

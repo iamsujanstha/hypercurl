@@ -12,7 +12,6 @@ import {
   ApiClientWorkspace,
   TerminalDialog,
   HistoryList,
-  AutocannonStudio,
   TestSuiteRunner
 } from '@/features/api-tester';
 
@@ -64,6 +63,13 @@ export function ApiTester({ variables: initialVariables = {} }: { variables?: Re
     ws
   } = useApiTesterState(initialVariables);
 
+  // Synchronize Autocannon mode when user selects Autocannon from sidebar/views
+  React.useEffect(() => {
+    if (view === 'autocannon' && activeTab && activeTab.testMode !== 'load') {
+      updateActiveTab({ testMode: 'load', batchMode: false });
+    }
+  }, [view, activeTab?.id]);
+
   if (!activeTab) return null;
 
   return (
@@ -111,7 +117,7 @@ export function ApiTester({ variables: initialVariables = {} }: { variables?: Re
         {/* Dynamic Workspace Switcher Panels */}
         <div className="flex-1 overflow-hidden relative">
           <AnimatePresence mode="wait">
-            {(view === 'studio' || view === 'debugger') && (
+            {(view === 'studio' || view === 'debugger' || view === 'autocannon') && (
               <ApiClientWorkspace 
                 activeTab={activeTab}
                 activeTabId={activeTabId}
@@ -148,32 +154,6 @@ export function ApiTester({ variables: initialVariables = {} }: { variables?: Re
               />
             )}
 
-            {view === 'autocannon' && (
-              <motion.div 
-                key="autocannon"
-                initial={{ opacity: 0, scale: 0.99 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.99 }}
-                transition={{ duration: 0.15 }}
-                className="absolute inset-0 overflow-hidden flex flex-col"
-              >
-                <AutocannonStudio 
-                  activeTab={activeTab}
-                  tabs={tabs}
-                  variables={variables}
-                  onStartAutocannon={handleStartAutocannon}
-                  onAbortAutocannon={handleAbortAutocannon}
-                  isExecuting={Boolean(activeTab.loading && (activeTab.autocannonProgress || !activeTab.autocannonResult))}
-                  autocannonProgress={activeTab.autocannonProgress || null}
-                  autocannonResult={activeTab.autocannonResult || null}
-                  onClearResults={() => {
-                    updateActiveTab({ autocannonResult: null, autocannonProgress: null, loading: false });
-                  }}
-                  telemetry={telemetry}
-                />
-              </motion.div>
-            )}
-
             {(view === 'suites' || view === 'lab') && (
               <motion.div 
                 key="suites"
@@ -202,7 +182,7 @@ export function ApiTester({ variables: initialVariables = {} }: { variables?: Re
                 className="absolute inset-0 overflow-y-auto p-8 custom-scrollbar bg-[#0B0D11]"
               >
                 <div className="max-w-4xl mx-auto">
-                  <VariablesManager variables={variables} onVariablesChange={setVariables} />
+                  <VariablesManager variables={variables} onVariablesChange={setVariables} theme={theme} />
                 </div>
               </motion.div>
             )}
