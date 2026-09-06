@@ -750,46 +750,6 @@ export function useApiTesterState(initialVariables: Record<string, string> = {})
       return;
     }
 
-    if (mode === 'race') {
-      handleStartLabTest('race', {
-        concurrency: activeTab.testConfig?.concurrency || 20,
-        iterations: activeTab.testConfig?.iterations || 20
-      });
-      return;
-    }
-
-    if (mode === 'security') {
-      handleStartLabTest('security_audit', {
-        securityChecks: activeTab.testConfig?.securityChecks || { sqli: true, xss: true, pathTraversal: true, headersAuditor: true }
-      });
-      return;
-    }
-
-    if (mode === 'chaos') {
-      handleStartLabTest('chaos', {
-        jitter: true,
-        chaosAmplitude: activeTab.testConfig?.chaosAmplitude || 60,
-        retries: activeTab.testConfig?.retries || 2
-      });
-      return;
-    }
-
-    if (mode === 'fuzz') {
-      handleStartLabTest('fuzzer', {
-        iterations: activeTab.testConfig?.iterations || 15,
-        fuzzChecks: activeTab.testConfig?.fuzzChecks || { keyDeletions: true, typeMutations: true, bufferOverflow: false }
-      });
-      return;
-    }
-
-    if (mode === 'distributed') {
-      handleStartLabTest('distributed', {
-        regions: activeTab.testConfig?.regions || ['us', 'eu', 'apac', 'latam'],
-        rotateIps: true
-      });
-      return;
-    }
-
     updateActiveTab({ loading: true });
     try {
       const response = await fetch('/api/execute', {

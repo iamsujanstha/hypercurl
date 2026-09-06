@@ -211,21 +211,6 @@ export function ApiTester({ variables: initialVariables = {} }: { variables?: Re
             )}
           </AnimatePresence>
         </div>
-
-        {/* Native Engine Status Footer Bar */}
-        <footer className="h-8 border-t border-slate-850 bg-[#0F1115] flex items-center justify-between px-4 text-[10px] font-mono text-slate-500 shrink-0 select-none">
-          <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> HYPERCURL ENGINE: READY
-            </span>
-            <span className="text-slate-400">ENGINES: cURL (libcurl/native) + Autocannon</span>
-            <span className="opacity-40">|</span>
-            <span>CLIENTS: {telemetry.clientCount}</span>
-          </div>
-          <div className="flex gap-4">
-            <span className="text-slate-400 font-bold">PRODUCTION v1.0.0</span>
-          </div>
-        </footer>
       </main>
 
       {/* 3. Global custom terminal modal dialog overlay */}

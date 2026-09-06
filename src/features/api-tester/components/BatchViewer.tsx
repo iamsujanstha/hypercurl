@@ -19,6 +19,7 @@ interface BatchViewerProps {
   progress: ProgressUpdate | null;
   concurrency: number;
   onAbort: () => void;
+  onClear?: () => void;
   theme?: 'dark' | 'light';
 }
 
@@ -26,8 +27,9 @@ export function BatchViewer({
   results, 
   progress, 
   concurrency, 
-  onAbort, 
-  theme = 'dark' 
+  onAbort,
+  onClear,
+  theme = 'dark'
 }: BatchViewerProps) {
   const [selectedResult, setSelectedResult] = useState<CurlResult | null>(null);
 
@@ -51,48 +53,38 @@ export function BatchViewer({
   const filteredResults = results;
 
   return (
-    <div className="flex flex-col lg:flex-row h-full bg-black text-slate-300 divide-y lg:divide-y-0 lg:divide-x divide-slate-800/60 overflow-hidden">
+    <div className={cn('flex flex-col lg:flex-row h-full divide-y lg:divide-y-0 lg:divide-x overflow-hidden', theme === 'light' ? 'bg-white text-slate-900 divide-slate-200' : 'bg-black text-slate-300 divide-slate-800/60')}>
       {/* Panel 1: STREAM_ORCHESTRATOR & Telemetry Logs */}
-      <div className={cn("flex flex-col h-full bg-black overflow-hidden transition-all duration-300", selectedResult ? "w-full lg:w-[48%]" : "w-full")}>
+      <div className={cn('flex flex-col h-full overflow-hidden transition-all duration-300', theme === 'light' ? 'bg-white' : 'bg-black', selectedResult ? "w-full lg:w-[48%]" : "w-full")}>
         {/* Header of STREAM_ORCHESTRATOR */}
-        <div className="p-5 p-6 border-b border-slate-900 bg-[#0F1115] shrink-0 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-1.5 bg-amber-500/10 rounded border border-amber-500/20">
-                <Layers size={14} className="text-amber-500" aria-hidden="true" />
-              </div>
-              <div>
-                <h3 className="text-xs font-black text-white uppercase tracking-[0.2em] leading-none">STREAM_ORCHESTRATOR</h3>
-                <p className="text-[10px] text-slate-400 font-mono mt-1.5 uppercase tracking-widest">Multi-Threaded_Execution_Telemetry</p>
-              </div>
-            </div>
-            {progress && (
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 px-2 py-1 bg-[#10B981]/10 border border-[#10B981]/25 rounded">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></div>
-                  <span className="text-[9px] font-black text-[#10B981] uppercase tracking-wider">RUNNING</span>
-                </div>
-                <button 
-                  onClick={onAbort}
-                  className="text-[10px] font-bold text-slate-300 border border-slate-800 px-3 py-1 rounded hover:bg-rose-600 hover:text-white hover:border-rose-650 transition-all uppercase tracking-wider cursor-pointer"
-                  aria-label="Stop batch stream execution"
-                >
-                  SIGINT
-                </button>
-              </div>
-            )}
-          </div>
-
+        <div className={cn('p-5 p-6 border-b shrink-0 space-y-4', theme === 'light' ? 'border-slate-200 bg-slate-50' : 'border-slate-900 bg-[#0F1115]')}>
           <div className="space-y-2">
             <div className="flex justify-between items-end">
               <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                 PROGRESS <span className="text-slate-100 dark:text-white ml-2 font-mono batch-progress-count">{progress ? progress.completed : results.length} / {progress ? progress.total : results.length}</span>
               </div>
-              <div className="text-xs font-black text-emerald-500 font-mono">
-                {progress && progress.total > 0 ? ((progress.completed / progress.total) * 100).toFixed(1) : (results.length > 0 ? '100.0' : '0.0')}%
+              <div className="flex items-center gap-3">
+                {progress && (
+                  <>
+                    <div className="flex items-center gap-1.5 px-2 py-1 bg-[#10B981]/10 border border-[#10B981]/25 rounded">
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></div>
+                      <span className="text-[9px] font-black text-[#10B981] uppercase tracking-wider">RUNNING</span>
+                    </div>
+                    <button 
+                      onClick={onAbort}
+                      className={cn('text-[10px] font-bold px-3 py-1 rounded transition-all uppercase tracking-wider cursor-pointer border', theme === 'light' ? 'text-slate-600 border-slate-300 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200' : 'text-slate-300 border-slate-800 hover:bg-rose-600 hover:text-white hover:border-rose-650')}
+                      aria-label="Stop batch stream execution"
+                    >
+                      SIGINT
+                    </button>
+                  </>
+                )}
+                <div className="text-xs font-black text-emerald-500 font-mono">
+                  {progress && progress.total > 0 ? ((progress.completed / progress.total) * 100).toFixed(1) : (results.length > 0 ? '100.0' : '0.0')}%
+                </div>
               </div>
             </div>
-            <div className="h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-900">
+            <div className={cn('h-1.5 rounded-full overflow-hidden border', theme === 'light' ? 'bg-slate-200 border-slate-300' : 'bg-slate-950 border-slate-900')}>
               <motion.div 
                  className="h-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
                  initial={{ width: 0 }}
@@ -117,7 +109,7 @@ export function BatchViewer({
           </div>
 
           {/* Real-time Latency Chart */}
-          <div className="bg-slate-950/40 p-3 rounded-lg border border-slate-900 space-y-2">
+          <div className={cn('p-3 rounded-lg border space-y-2', theme === 'light' ? 'bg-slate-100/50 border-slate-200' : 'bg-slate-950/40 border-slate-900')}>
             <div className="flex justify-between items-center text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">
               <span>LATENCY_FLUCTUATIONS (LAST 40 CALLS)</span>
               {results.length > 0 && <span className="text-blue-400 font-mono text-[10px]">{results[results.length - 1]?.responseTime}ms</span>}
@@ -130,7 +122,7 @@ export function BatchViewer({
                     <YAxis 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fill: '#475569', fontSize: 9, fontFamily: 'monospace' }} 
+                      tick={{ fill: theme === 'light' ? '#64748B' : '#475569', fontSize: 9, fontFamily: 'monospace' }} 
                       domain={['auto', 'auto']}
                     />
                     <Tooltip 
@@ -138,7 +130,7 @@ export function BatchViewer({
                         if (active && payload && payload.length) {
                           const data = payload[0].payload;
                           return (
-                            <div className="bg-[#090D14]/95 border border-slate-800 p-2 text-[10px] font-mono rounded shadow-lg text-slate-300">
+                            <div className={cn("border p-2 text-[10px] font-mono rounded shadow-lg", theme === 'light' ? "bg-white/95 border-slate-200 text-slate-800" : "bg-[#090D14]/95 border-slate-800 text-slate-300")}>
                               <div className="text-slate-500 font-bold mb-1">{data.name}</div>
                               <div className="flex gap-2">
                                 <span>LATENCY:</span>
@@ -175,7 +167,7 @@ export function BatchViewer({
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-full flex items-center justify-center border border-dashed border-slate-900 rounded bg-[#090D14]/25">
+                <div className={cn('h-full flex items-center justify-center border border-dashed rounded', theme === 'light' ? 'border-slate-300 bg-slate-50' : 'border-slate-900 bg-[#090D14]/25')}>
                   <span className="text-xs font-mono text-slate-505 uppercase tracking-widest">Awaiting transmissions</span>
                 </div>
               )}
@@ -185,13 +177,29 @@ export function BatchViewer({
 
         {/* Telemetry Logs List */}
         <div className="flex-1 overflow-hidden flex flex-col">
-          <div className="px-6 py-2 border-b border-slate-900 bg-black/40 flex items-center justify-between shrink-0">
-             <span className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">TELEMETRY_LOGS</span>
-             <div className="text-xs font-mono text-slate-505 font-bold uppercase">SESSION_RETAIN: 50</div>
+          <div className={cn("px-6 py-2 border-b flex items-center justify-between shrink-0", theme === 'light' ? 'border-slate-200 bg-slate-100' : 'border-slate-900 bg-black/40')}>
+             <span className={cn("text-xs font-black uppercase tracking-[0.2em]", theme === 'light' ? 'text-slate-500' : 'text-slate-400')}>RECENT REQUESTS</span>
+             <div className="flex items-center gap-4">
+                <div className={cn("text-xs font-mono font-bold uppercase", theme === 'light' ? 'text-slate-500' : 'text-slate-500')}>SHOWING LAST 55</div>
+                {onClear && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onClear(); }}
+                    className={cn(
+                      "text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded border transition-colors cursor-pointer flex items-center gap-1.5",
+                      theme === 'light'
+                        ? "text-rose-600 border-rose-200 hover:bg-rose-50"
+                        : "text-slate-300 border-slate-800 hover:text-white hover:bg-rose-600 hover:border-rose-650"
+                    )}
+                  >
+                    <X size={12} /> Clear All
+                  </button>
+                )}
+             </div>
           </div>
 
           {/* List Area */}
-          <div className="flex-1 overflow-y-auto p-4 px-6 custom-scrollbar space-y-1.5 bg-black">
+          <div className={cn('flex-1 overflow-y-auto p-4 px-6 custom-scrollbar space-y-1.5', theme === 'light' ? 'bg-slate-50' : 'bg-black')}>
             <AnimatePresence initial={false}>
 
               {[...filteredResults].slice(-55).reverse().map((res, i) => {
@@ -224,8 +232,8 @@ export function BatchViewer({
                     className={cn(
                       "group flex border-l-2 py-2 px-3 transition-all cursor-pointer items-center min-h-[40px] gap-3 rounded-r",
                       isSelected 
-                        ? "border-emerald-500 bg-emerald-500/15 text-white" 
-                        : "border-slate-800 hover:border-slate-500 hover:bg-slate-900/40 text-slate-300"
+                        ? theme === 'light' ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-md ring-1 ring-emerald-500/20' : 'border-emerald-500 bg-emerald-500/15 text-white' 
+                        : theme === 'light' ? 'border-slate-200 hover:border-slate-300 hover:bg-white text-slate-700 bg-white shadow-sm' : 'border-slate-800 hover:border-slate-500 hover:bg-slate-900/40 text-slate-300'
                     )}
                     role="button"
                     aria-pressed={isSelected}
@@ -286,8 +294,8 @@ export function BatchViewer({
 
       {/* Panel 2: Result details dynamically side-by-side! */}
       {selectedResult && (
-        <div className="flex-1 flex flex-col h-full bg-black relative">
-          <div className="p-3 px-4 border-b border-slate-900 bg-[#0F1115] flex items-center justify-between shrink-0 font-sans">
+        <div className={cn('flex-1 flex flex-col h-full relative', theme === 'light' ? 'bg-white' : 'bg-black')}>
+          <div className={cn('p-3 px-4 border-b flex items-center justify-between shrink-0 font-sans', theme === 'light' ? 'border-slate-200 bg-slate-50' : 'border-slate-900 bg-[#0F1115]')}>
             <div className="flex items-center gap-3">
                <button 
                  onClick={() => setSelectedResult(null)}

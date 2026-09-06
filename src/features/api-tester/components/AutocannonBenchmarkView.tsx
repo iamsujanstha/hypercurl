@@ -134,8 +134,6 @@ export function AutocannonBenchmarkView({
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 bg-[#07090E] text-slate-200 select-none overflow-y-auto font-sans">
         <div className="w-full max-w-xl bg-[#0C0F17] border border-slate-800 rounded-xl p-6 shadow-2xl space-y-6">
-          
-          {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
             <div>
               <div className="flex items-center gap-2">
@@ -148,113 +146,53 @@ export function AutocannonBenchmarkView({
                 <span className="text-amber-400 font-bold">{targetMethod}</span> {targetUrl || 'http://localhost:3000'}
               </div>
             </div>
-
             <button
-              type="button"
               onClick={onAbortBenchmark}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600/90 hover:bg-rose-500 text-white flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+              className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold text-xs uppercase tracking-wider font-mono border border-rose-500/30 transition-colors"
             >
-              <Square size={11} className="fill-white" />
-              Stop Test
+              Abort
             </button>
           </div>
 
-          {/* Clean Progress Indicator */}
-          <div className="space-y-2">
-            <div className="flex justify-between text-xs font-mono text-slate-400">
-              <span>Time Elapsed: <strong className="text-white">{elapsed}s</strong> of {totalDur}s</span>
-              <span className="text-amber-400 font-bold">{percent}%</span>
+          <div className="space-y-4">
+            <div className="flex justify-between items-end text-xs font-mono">
+              <span className="text-slate-400">Progress</span>
+              <span className="text-amber-400 font-bold">{percent.toFixed(1)}%</span>
             </div>
-            
-            <div className="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden border border-slate-800">
+            <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
               <div 
-                className="bg-amber-500 h-full rounded-full transition-all duration-300"
-                style={{ width: `${percent}%` }}
+                className="h-full bg-amber-500 transition-all duration-300 ease-out" 
+                style={{ width: `${percent}%` }} 
               />
             </div>
           </div>
 
-          {/* Real-time Telemetry Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-[#080A10] border border-slate-800 rounded-lg p-3 text-center">
-              <div className="text-[10px] text-slate-500 uppercase font-semibold">Current RPS</div>
-              <div className="text-lg font-bold text-emerald-400 font-mono mt-0.5">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-[#07090E] border border-slate-800 rounded-lg p-3">
+              <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider font-mono">Current RPS</span>
+              <div className="text-xl font-bold text-emerald-400 font-mono mt-1">
                 {currentRps.toLocaleString()}
               </div>
-              <div className="text-[10px] text-slate-500 font-mono">req/sec</div>
             </div>
-
-            <div className="bg-[#080A10] border border-slate-800 rounded-lg p-3 text-center">
-              <div className="text-[10px] text-slate-500 uppercase font-semibold">Latency</div>
-              <div className="text-lg font-bold text-cyan-400 font-mono mt-0.5">
-                {currentLatency.toFixed(1)}
+            <div className="bg-[#07090E] border border-slate-800 rounded-lg p-3">
+              <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider font-mono">Avg Latency</span>
+              <div className="text-xl font-bold text-blue-400 font-mono mt-1">
+                {currentLatency.toFixed(1)}ms
               </div>
-              <div className="text-[10px] text-slate-500 font-mono">ms avg</div>
             </div>
-
-            <div className="bg-[#080A10] border border-slate-800 rounded-lg p-3 text-center">
-              <div className="text-[10px] text-slate-500 uppercase font-semibold">Data Rate</div>
-              <div className="text-lg font-bold text-purple-400 font-mono mt-0.5">
-                {currentKB}
+            <div className="bg-[#07090E] border border-slate-800 rounded-lg p-3">
+              <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider font-mono">Throughput</span>
+              <div className="text-xl font-bold text-purple-400 font-mono mt-1">
+                {currentKB} KB/s
               </div>
-              <div className="text-[10px] text-slate-500 font-mono">KB/sec</div>
             </div>
-
-            <div className="bg-[#080A10] border border-slate-800 rounded-lg p-3 text-center">
-              <div className="text-[10px] text-slate-500 uppercase font-semibold">Sockets</div>
-              <div className="text-lg font-bold text-amber-400 font-mono mt-0.5">
-                {connections}
+            <div className="bg-[#07090E] border border-slate-800 rounded-lg p-3">
+              <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider font-mono">Elapsed Time</span>
+              <div className="text-xl font-bold text-slate-200 font-mono mt-1">
+                {elapsed}s <span className="text-slate-600 text-sm">/ {totalDur}s</span>
               </div>
-              <div className="text-[10px] text-slate-500 font-mono">concurrent</div>
             </div>
           </div>
-
-          <div className="text-[11px] text-slate-500 font-mono truncate bg-[#06080E] p-2 rounded border border-slate-850">
-            $ {cliCommand}
-          </div>
-
-        </div>
-      </div>
-    );
-  }
-
-  // =========================================================================
-  // 2. EMPTY STATE
-  // =========================================================================
-  if (!autocannonResult) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#07090E] text-slate-400 select-none font-sans">
-        <div className="max-w-md w-full bg-[#0C0F17] border border-slate-800 rounded-xl p-6 text-center space-y-4 shadow-lg">
-          <div className="w-11 h-11 mx-auto rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-            <Zap size={22} />
-          </div>
-          <div>
-            <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">
-              Autocannon Load Engine Ready
-            </h3>
-            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-              Measure HTTP throughput, latency percentiles, and socket saturation under high concurrent load.
-            </p>
-          </div>
-
-          <div className="bg-[#06080E] p-3 rounded-lg border border-slate-850 text-left space-y-1 text-xs font-mono">
-            <div className="text-slate-400 flex justify-between">
-              <span>Target: <strong className="text-amber-400">{targetMethod}</strong> {targetUrl ? new URL(targetUrl).pathname : '/api/health'}</span>
-              <span className="text-slate-400 font-bold">{connections}c • {duration}s</span>
-            </div>
-            <div className="text-slate-500 truncate text-[11px] pt-1">
-              $ {cliCommand}
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onStartBenchmark}
-            className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 active:scale-98 text-slate-950 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
-          >
-            <Play size={13} className="fill-slate-950" />
-            Start Load Test
-          </button>
         </div>
       </div>
     );
@@ -262,6 +200,18 @@ export function AutocannonBenchmarkView({
 
   // =========================================================================
   // 3. COMPLETED BENCHMARK RESULTS
+  // =========================================================================
+  if (!autocannonResult) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-[#07090E] text-slate-500 font-mono text-sm">
+        <Activity size={32} className="mb-4 opacity-50 text-amber-500" />
+        <p>No benchmark results available.</p>
+        <p className="text-xs opacity-70 mt-2">Click "Run Benchmark" in the top right to start a load test.</p>
+      </div>
+    );
+  }
+
+
   // =========================================================================
   const l = autocannonResult.latency || ({} as any);
   const r = autocannonResult.requests || ({} as any);
@@ -283,15 +233,6 @@ export function AutocannonBenchmarkView({
         
         {/* Left: Summary Tag */}
         <div className="flex items-center gap-2.5 flex-wrap">
-          <div className="px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono font-bold flex items-center gap-1.5">
-            <Zap size={12} />
-            <span>AUTOCANNON</span>
-          </div>
-
-          <div className="text-xs text-slate-300 font-mono font-bold px-2.5 py-1 bg-[#121622] rounded border border-slate-800 truncate max-w-sm">
-            <span className="text-amber-400">{autocannonResult.method || targetMethod}</span> {autocannonResult.url || targetUrl}
-          </div>
-
           <div className="text-xs text-slate-400 font-mono px-2 py-1 rounded bg-[#0D1018] border border-slate-850">
             {autocannonResult.connections || connections} connections • {autocannonResult.durationSeconds || duration}s duration
           </div>

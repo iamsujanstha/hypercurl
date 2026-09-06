@@ -23,7 +23,7 @@ export function WorkspaceNavbar({
   isSidebarCollapsed,
   setIsSidebarCollapsed,
   environments = [],
-  activeEnvironmentId = 'env-local',
+  activeEnvironmentId,
   onSelectEnvironment
 }: WorkspaceNavbarProps) {
   const getNavLabel = (v: AppView) => {
@@ -33,9 +33,7 @@ export function WorkspaceNavbar({
         return 'SINGLE REQUEST / CURL';
       case 'autocannon':
         return 'AUTOCANNON BENCHMARK';
-      case 'suites':
-      case 'lab':
-        return 'TEST SUITES';
+      
       case 'variables':
         return 'ENVIRONMENTS';
       case 'history':
@@ -74,24 +72,18 @@ export function WorkspaceNavbar({
       
       <div className="flex items-center gap-1.5 sm:gap-3">
         {/* Environment Quick Switcher */}
-        {environments.length > 0 && onSelectEnvironment && (
+        {onSelectEnvironment && (
           <div className="flex items-center gap-1.5 bg-[#12161E]/80 border border-slate-800 rounded-lg px-2.5 py-1 text-xs font-mono shadow-xs">
-            {activeEnv?.isProduction ? (
-              <ShieldAlert size={13} className="text-rose-400 animate-pulse shrink-0" />
-            ) : (
-              <Server size={13} className="text-emerald-400 shrink-0" />
-            )}
+            <Server size={13} className="text-emerald-400 shrink-0" />
             <select
-              value={activeEnvironmentId}
+              value={activeEnvironmentId || ''}
               onChange={(e) => onSelectEnvironment(e.target.value)}
-              className={cn(
-                "bg-transparent font-bold outline-none cursor-pointer text-[11px]",
-                activeEnv?.isProduction ? "text-rose-400 font-bold" : "text-emerald-400 font-bold"
-              )}
+              className="bg-transparent font-bold outline-none cursor-pointer text-[11px] text-emerald-400 font-bold"
             >
+              <option value="" className="bg-slate-900 text-slate-400">No Environment</option>
               {environments.map(env => (
                 <option key={env.id} value={env.id} className="bg-slate-900 text-slate-200">
-                  {env.name} {env.isProduction ? '(PROD)' : ''}
+                  {env.name}
                 </option>
               ))}
             </select>

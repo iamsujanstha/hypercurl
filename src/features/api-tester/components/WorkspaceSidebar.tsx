@@ -38,7 +38,6 @@ export function WorkspaceSidebar({
     key: AppView; 
     label: string; 
     badge: string;
-    sublabel: string;
     icon: React.ComponentType<{ size?: number; className?: string }>;
     accentColor: string;
     badgeBg: string;
@@ -47,25 +46,15 @@ export function WorkspaceSidebar({
       key: 'studio', 
       label: 'API STUDIO', 
       badge: 'CURL',
-      sublabel: 'Single Request & DevTools Tabs',
       icon: Terminal,
       accentColor: 'text-emerald-400',
       badgeBg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
     },
-    { 
-      key: 'suites', 
-      label: 'TEST SUITES', 
-      badge: 'RUNNER',
-      sublabel: 'Automated Workflows, SLAs & Assertions',
-      icon: Layers,
-      accentColor: 'text-cyan-400',
-      badgeBg: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
-    },
+    
     { 
       key: 'variables', 
       label: 'ENVIRONMENTS', 
       badge: 'VARS',
-      sublabel: 'Global {{KEYS}} & Secrets',
       icon: Sliders,
       accentColor: 'text-blue-400',
       badgeBg: 'bg-blue-500/10 text-blue-400 border-blue-500/30'
@@ -74,7 +63,6 @@ export function WorkspaceSidebar({
       key: 'history', 
       label: 'AUDIT LOGS', 
       badge: 'LOGS',
-      sublabel: 'Execution History & Replay',
       icon: History,
       accentColor: 'text-purple-400',
       badgeBg: 'bg-purple-500/10 text-purple-400 border-purple-500/30'
@@ -115,18 +103,11 @@ export function WorkspaceSidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar py-3 px-2 space-y-1.5">
-        {!isSidebarCollapsed && (
-          <div className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2 ml-2 select-none flex items-center justify-between pr-2">
-            <span>WORKFLOWS</span>
-            <span className="text-[8px] text-slate-600 font-mono">SELECT MODE</span>
-          </div>
-        )}
-        
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = view === item.key || 
             (item.key === 'studio' && view === 'debugger') ||
-            (item.key === 'suites' && view === 'lab');
+            false;
           return (
             <button 
               key={item.key}
@@ -144,13 +125,13 @@ export function WorkspaceSidebar({
                   ? "bg-[#182235] text-white border border-slate-700 shadow-md ring-1 ring-white/10 sidebar-active-btn" 
                   : "text-slate-400 hover:bg-[#151D2A] hover:text-slate-100 border border-transparent hover:border-slate-800/80"
               )}
-              title={isSidebarCollapsed ? `${item.label} (${item.sublabel})` : ""}
+              title={isSidebarCollapsed ? item.label : ""}
             >
               {/* Active Indicator Bar */}
               {isActive && (
                 <span className={cn(
                   "absolute left-0 top-1 bottom-1 w-1.5 rounded-r-full shadow-sm",
-                  item.key === 'suites' ? "bg-cyan-400 shadow-cyan-400/50" :
+                  
                   item.key === 'variables' ? "bg-blue-400 shadow-blue-400/50" :
                   item.key === 'history' ? "bg-purple-400 shadow-purple-400/50" :
                   "bg-emerald-400 shadow-emerald-400/50"
@@ -186,35 +167,11 @@ export function WorkspaceSidebar({
                       {item.badge}
                     </span>
                   </div>
-                  <span className={cn(
-                    "text-[9.5px] font-sans truncate mt-0.5 font-normal",
-                    isActive ? "text-slate-300" : "text-slate-500"
-                  )}>
-                    {item.sublabel}
-                  </span>
                 </div>
               )}
             </button>
           );
         })}
-
-        {/* Informative Guidance Card when Sidebar is open */}
-        {!isSidebarCollapsed && (
-          <div className="mt-4 pt-3 border-t border-slate-900/80 px-2 space-y-2">
-            <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-850/80 text-[10px] space-y-1.5">
-              <div className="flex items-center gap-1.5 font-mono font-bold text-slate-300 text-[10px]">
-                <Sparkles size={12} className="text-emerald-400" />
-                <span>ENGINES</span>
-              </div>
-              <p className="text-slate-400 text-[9.5px] leading-relaxed">
-                • <strong className="text-emerald-400">cURL Engine:</strong> Native single-request inspection with complete headers, payload and response tabs.
-              </p>
-              <p className="text-slate-400 text-[9.5px] leading-relaxed">
-                • <strong className="text-amber-400">Autocannon Engine:</strong> High-throughput HTTP socket load testing with latency percentiles and RPS charts.
-              </p>
-            </div>
-          </div>
-        )}
       </div>
 
       {!isSidebarCollapsed && (

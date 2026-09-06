@@ -226,9 +226,7 @@ export interface EnvironmentVariable {
 export interface Environment {
   id: string;
   name: string;
-  type: 'local' | 'dev' | 'qa' | 'staging' | 'production' | 'custom';
   variables: EnvironmentVariable[];
-  isProduction?: boolean;
   baseUrl?: string;
 }
 

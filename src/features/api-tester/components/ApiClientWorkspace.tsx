@@ -159,6 +159,7 @@ export function ApiClientWorkspace({
   const [activeRequestTab, setActiveRequestTab] = useState<'params' | 'headers' | 'body' | 'auth' | 'assertions' | 'extractors' | 'batch' | 'loadSettings'>('params');
   const [copiedCurl, setCopiedCurl] = useState(false);
   const [copiedAutocannonCli, setCopiedAutocannonCli] = useState(false);
+  const [copiedBatchCli, setCopiedBatchCli] = useState(false);
   const [showCurlModal, setShowCurlModal] = useState(false);
   const [showSendDropdown, setShowSendDropdown] = useState(false);
 
@@ -176,19 +177,6 @@ export function ApiClientWorkspace({
       setActiveMobilePanel('response');
     }
   }, [activeTab.loading]);
-
-  // Keep activeRequestTab aligned with mode selection so Autocannon is never shown in Batch mode
-  useEffect(() => {
-    if (activeTab.batchMode) {
-      if (activeRequestTab === 'loadSettings') {
-        setActiveRequestTab('batch');
-      }
-    } else if (activeTab.testMode === 'load') {
-      if (activeRequestTab === 'batch') {
-        setActiveRequestTab('loadSettings');
-      }
-    }
-  }, [activeTab.batchMode, activeTab.testMode, activeRequestTab]);
 
   // Parse query parameters from URL
   const queryParams = useMemo(() => {
@@ -300,16 +288,77 @@ export function ApiClientWorkspace({
     setTimeout(() => setCopiedAutocannonCli(false), 2000);
   };
 
+  // Generate live Batch CLI command snippet
+  
+  const [copiedSingleCli, setCopiedSingleCli] = useState(false);
+  const singleCliString = useMemo(() => {
+    const resolved = getResolvedConfig(activeTab);
+    const isGraphql = resolved.method === 'GRAPHQL';
+    const method = isGraphql ? 'POST' : resolved.method;
+    
+    let cmd = `curl -X ${method}`;
+    const finalHeaders = { ...resolved.headers };
+    if (isGraphql && !finalHeaders['Content-Type']) {
+      finalHeaders['Content-Type'] = 'application/json';
+    }
+    
+    for (const [k, v] of Object.entries(finalHeaders)) {
+      cmd += ` -H "${k}: ${v}"`;
+    }
+    
+    if (resolved.body) {
+      cmd += ` -d '${resolved.body.replace(/'/g, "'\\''")}'`;
+    }
+    cmd += ` "${resolved.url || 'http://localhost:3000/api/health'}"`;
+    return cmd;
+  }, [activeTab, getResolvedConfig]);
+
+  const handleCopySingleCli = () => {
+    navigator.clipboard.writeText(singleCliString);
+    setCopiedSingleCli(true);
+    setTimeout(() => setCopiedSingleCli(false), 2000);
+  };
+
+  const batchCliString = useMemo(() => {
+    const resolved = getResolvedConfig(activeTab);
+    const iters = activeTab.batchIterations || 10;
+    const conc = activeTab.batchConcurrency || 5;
+    const isGraphql = resolved.method === 'GRAPHQL';
+    const method = isGraphql ? 'POST' : resolved.method;
+    
+    let cmd = `seq 1 ${iters} | xargs -n1 -P ${conc} curl -s -X ${method}`;
+    const finalHeaders = { ...resolved.headers };
+    if (isGraphql && !finalHeaders['Content-Type']) {
+      finalHeaders['Content-Type'] = 'application/json';
+    }
+    
+    for (const [k, v] of Object.entries(finalHeaders)) {
+      cmd += ` -H "${k}: ${v}"`;
+    }
+    
+    if (resolved.body) {
+      cmd += ` -d '${resolved.body.replace(/'/g, "'\\''")}'`;
+    }
+    cmd += ` "${resolved.url || 'http://localhost:3000/api/health'}"`;
+    return cmd;
+  }, [activeTab, getResolvedConfig]);
+
+  const handleCopyBatchCli = () => {
+    navigator.clipboard.writeText(batchCliString);
+    setCopiedBatchCli(true);
+    setTimeout(() => setCopiedBatchCli(false), 2000);
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 5 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -5 }}
       transition={{ duration: 0.15 }}
-      className="absolute inset-0 flex flex-col lg:flex-row gap-0 overflow-hidden font-sans bg-[#080A0F]"
+      className={cn('absolute inset-0 flex flex-col lg:flex-row gap-0 overflow-hidden font-sans', theme === 'light' ? 'bg-slate-50' : 'bg-[#080A0F]')}
     >
       {/* Mobile view sub-segmented control tabs */}
-      <div className="lg:hidden flex bg-[#0E121A] border-b border-slate-850 p-1.5 shrink-0 h-11 items-center gap-1.5 select-none w-full">
+      <div className={cn('lg:hidden flex border-b border-slate-850 p-1.5 shrink-0 h-11 items-center gap-1.5 select-none w-full', theme === 'light' ? 'bg-white' : 'bg-[#0E121A]')}>
         <button
           onClick={() => setActiveMobilePanel('request')}
           className={cn(
@@ -343,113 +392,14 @@ export function ApiClientWorkspace({
       <div 
         style={windowWidth >= 1024 ? resolvedWidthStyle : undefined}
         className={cn(
-          "border-r border-slate-850 flex flex-col bg-[#0B0D13] shrink-0",
+          "border-r border-slate-850 flex flex-col ${theme === 'light' ? 'bg-slate-50' : 'bg-[#0B0D13]'} shrink-0",
           windowWidth >= 1024 ? "w-auto lg:flex-none h-full" : (activeMobilePanel === 'request' ? "w-full flex-1 overflow-hidden" : "hidden")
         )}
       >
         {/* Top Control Bar: Mode Title & Quick Tools */}
-        <div className="p-3.5 pb-2.5 border-b border-slate-850 flex flex-col gap-2.5 shrink-0 bg-[#0E121B]">
-          <div className="flex flex-wrap items-center justify-between gap-2 select-none">
-            {/* API Client Brand & Chrome DevTools Tag */}
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-[10.5px] font-bold">
-                <Terminal size={13} />
-                <span>REQUEST COMPOSER</span>
-              </div>
-              <span className="text-[10px] font-sans text-slate-500 hidden sm:inline">
-                • Chrome DevTools Network Inspector
-              </span>
-            </div>
-
-            {/* Quick Actions (Mode Switcher, Save, Copy cURL) */}
-            <div className="flex items-center gap-2">
-              {/* Visible Mode Switcher Pill */}
-              <div className="flex items-center bg-[#07090E] border border-slate-800 rounded-lg p-0.5 text-[10.5px] font-mono select-none shadow-xs">
-                <button
-                  type="button"
-                  onClick={() => {
-                    updateActiveTab({ batchMode: false, testMode: 'functional' });
-                    if (activeRequestTab === 'batch' || activeRequestTab === 'loadSettings') {
-                      setActiveRequestTab('params');
-                    }
-                  }}
-                  className={cn(
-                    "px-2.5 py-1 rounded-md font-bold transition-all flex items-center gap-1.5 cursor-pointer",
-                    !activeTab.batchMode && activeTab.testMode !== 'load'
-                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-xs" 
-                      : "text-slate-400 hover:text-slate-200"
-                  )}
-                  title="Run standard single request"
-                >
-                  <Play size={10} fill="currentColor" />
-                  <span>Single</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    updateActiveTab({ batchMode: true, testMode: 'race' });
-                    setActiveRequestTab('batch');
-                  }}
-                  className={cn(
-                    "px-2.5 py-1 rounded-md font-bold transition-all flex items-center gap-1.5 cursor-pointer",
-                    activeTab.batchMode && activeTab.testMode !== 'load'
-                      ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 shadow-xs" 
-                      : "text-slate-400 hover:text-slate-200"
-                  )}
-                  title="Run concurrent batch requests with iterations"
-                >
-                  <Activity size={11} />
-                  <span>Batch (Race)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    updateActiveTab({ batchMode: false, testMode: 'load' });
-                    setActiveRequestTab('loadSettings');
-                  }}
-                  className={cn(
-                    "px-2.5 py-1 rounded-md font-bold transition-all flex items-center gap-1.5 cursor-pointer",
-                    activeTab.testMode === 'load'
-                      ? "bg-gradient-to-r from-amber-500/25 to-rose-500/25 text-amber-400 border border-amber-500/40 shadow-xs" 
-                      : "text-slate-400 hover:text-slate-200"
-                  )}
-                  title="Run high-throughput Autocannon benchmark"
-                >
-                  <Flame size={11} className={activeTab.testMode === 'load' ? "text-amber-400 fill-amber-400" : "text-slate-400"} />
-                  <span>Autocannon</span>
-                </button>
-              </div>
-
-              <div className="h-4 w-px bg-slate-800 hidden sm:block" />
-
-              <button
-                type="button"
-                onClick={handleCopyCurl}
-                className={cn(
-                  "px-2.5 py-1 rounded text-[10.5px] font-mono font-bold flex items-center gap-1 transition-all cursor-pointer border",
-                  copiedCurl
-                    ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
-                    : "bg-[#141C2B] hover:bg-slate-800 text-slate-400 hover:text-slate-200 border-slate-700/50"
-                )}
-                title="Copy standard cURL command to clipboard"
-              >
-                {copiedCurl ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                <span>{copiedCurl ? 'COPIED' : 'COPY cURL'}</span>
-              </button>
-
-              <button 
-                type="button"
-                onClick={saveToCollection}
-                className="px-2.5 py-1 bg-[#141C2B] hover:bg-slate-800 rounded text-[10.5px] font-bold font-mono text-slate-400 hover:text-slate-200 flex items-center gap-1 uppercase transition-all border border-slate-700/50 cursor-pointer"
-                title="Save request to workspace collection"
-              >
-                <Save size={11} className="text-emerald-400" /> SAVE
-              </button>
-            </div>
-          </div>
-
+        <div className={cn('p-3.5 pb-2.5 border-b border-slate-850 flex flex-col gap-2.5 shrink-0', theme === 'light' ? 'bg-white' : 'bg-[#0E121B]')}>
           {/* Primary Request URL Bar & Execution Button */}
-          <div className="flex rounded-xl bg-[#07090E] border border-slate-800 focus-within:border-emerald-500/50 shadow-inner relative z-30">
+          <div className={cn('flex rounded-xl border border-slate-800 focus-within:border-emerald-500/50 shadow-inner relative z-30', theme === 'light' ? 'bg-white' : 'bg-[#07090E]')}>
             <select
               value={activeTab.config.method}
               onChange={(e) => updateActiveConfig({ method: e.target.value as any })}
@@ -481,12 +431,14 @@ export function ApiClientWorkspace({
                 type="button"
                 onClick={activeTab.loading ? (handleAbortAutocannon || handleAbort) : handleRun}
                 className={cn(
-                  "px-5 text-xs font-mono font-black tracking-wider transition-all text-white active:scale-95 flex items-center justify-center gap-2 cursor-pointer select-none",
+                  "px-5 text-xs font-mono font-black tracking-wider transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer select-none",
                   activeTab.loading 
-                    ? "bg-rose-700 hover:bg-rose-650 rounded-r-xl" 
+                    ? "bg-rose-600 hover:bg-rose-500 text-white rounded-r-xl" 
                     : activeTab.testMode === 'load'
                       ? "bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-slate-950 font-black shadow-md shadow-amber-500/20"
-                      : activeTab.batchMode ? "bg-cyan-600 hover:bg-cyan-500" : "bg-emerald-600 hover:bg-emerald-500"
+                      : activeTab.batchMode 
+                        ? (theme === 'light' ? "bg-cyan-600 hover:bg-cyan-500 text-white" : "bg-cyan-600 hover:bg-cyan-500 text-white") 
+                        : (theme === 'light' ? "bg-emerald-600 hover:bg-emerald-500 text-white" : "bg-emerald-600 hover:bg-emerald-500 text-white")
                 )}
                 title={
                   activeTab.testMode === 'load'
@@ -515,10 +467,14 @@ export function ApiClientWorkspace({
                   type="button"
                   onClick={() => setShowSendDropdown(!showSendDropdown)}
                   className={cn(
-                    "px-2.5 flex items-center justify-center transition-all cursor-pointer border-l border-white/15 text-white rounded-r-xl",
-                    activeTab.testMode === 'load' ? "bg-amber-600 hover:bg-amber-500 text-slate-950" : activeTab.batchMode ? "bg-cyan-700 hover:bg-cyan-600" : "bg-emerald-700 hover:bg-emerald-600"
+                    "px-2.5 flex items-center justify-center transition-all cursor-pointer border-l rounded-r-xl",
+                    activeTab.testMode === 'load' 
+                      ? "bg-amber-600 hover:bg-amber-500 text-slate-950 border-slate-900/10" 
+                      : activeTab.batchMode 
+                        ? (theme === 'light' ? "bg-cyan-700 hover:bg-cyan-600 text-white border-cyan-800/20" : "bg-cyan-700 hover:bg-cyan-600 text-white border-white/15") 
+                        : (theme === 'light' ? "bg-emerald-700 hover:bg-emerald-600 text-white border-emerald-800/20" : "bg-emerald-700 hover:bg-emerald-600 text-white border-white/15")
                   )}
-                  title="Choose execution mode: Single vs Concurrent Batch vs Autocannon"
+                  title="Choose execution mode"
                 >
                   <ChevronDown size={14} className={cn("transition-transform duration-200", showSendDropdown && "rotate-180")} />
                 </button>
@@ -527,12 +483,7 @@ export function ApiClientWorkspace({
               {showSendDropdown && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowSendDropdown(false)} />
-                  <div className="absolute right-0 top-[48px] w-72 bg-[#0F121C] border border-slate-700/80 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col p-1.5 animate-fadeIn">
-                    <div className="px-2.5 py-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800 flex items-center justify-between">
-                      <span>Execution Mode</span>
-                      <span className="text-[9px] text-slate-500 font-normal">Choose mode</span>
-                    </div>
-
+                  <div className={cn("absolute right-0 top-[48px] w-72 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col p-1.5 animate-fadeIn", theme === 'light' ? 'bg-white border border-slate-200' : 'bg-[#0F121C] border border-slate-700/80')}>
                     <div className="p-1 flex flex-col gap-1">
                       <button
                         type="button"
@@ -545,17 +496,19 @@ export function ApiClientWorkspace({
                         }}
                         className={cn(
                           "w-full text-left px-3 py-2.5 text-xs font-bold rounded-lg flex items-center gap-2.5 cursor-pointer transition-colors",
-                          !activeTab.batchMode && activeTab.testMode !== 'load' ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" : "text-slate-300 hover:bg-[#182235]"
+                          !activeTab.batchMode && activeTab.testMode !== 'load' 
+                            ? (theme === 'light' ? "bg-emerald-50 text-emerald-600 border border-emerald-200" : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30") 
+                            : (theme === 'light' ? "text-slate-700 hover:bg-slate-50" : "text-slate-300 hover:${theme === 'light' ? 'bg-slate-100' : 'bg-[#182235]'}")
                         )}
                       >
-                        <div className={cn("p-1.5 rounded-md", !activeTab.batchMode && activeTab.testMode !== 'load' ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-400")}>
+                        <div className={cn("p-1.5 rounded-md", !activeTab.batchMode && activeTab.testMode !== 'load' ? (theme === 'light' ? "bg-emerald-100 text-emerald-600" : "bg-emerald-500/20 text-emerald-400") : (theme === 'light' ? "bg-slate-100 text-slate-500" : "bg-slate-800 text-slate-400"))}>
                           <Play size={14} fill="currentColor" />
                         </div>
                         <div className="flex flex-col">
-                          <span className="font-bold">Single Request</span>
-                          <span className="text-[10px] text-slate-400 font-normal">Standard 1-shot HTTP / cURL call</span>
+                          <span className={cn("font-bold", theme === 'light' ? "text-slate-900" : "text-slate-200")}>Single Request</span>
+                          <span className={cn("text-[10px] font-normal", theme === 'light' ? "text-slate-500" : "text-slate-400")}>Standard 1-shot HTTP call</span>
                         </div>
-                        {!activeTab.batchMode && activeTab.testMode !== 'load' && <Check size={16} className="ml-auto text-emerald-400" />}
+                        {!activeTab.batchMode && activeTab.testMode !== 'load' && <Check size={16} className={cn("ml-auto", theme === 'light' ? "text-emerald-500" : "text-emerald-400")} />}
                       </button>
 
                       <button
@@ -567,17 +520,19 @@ export function ApiClientWorkspace({
                         }}
                         className={cn(
                           "w-full text-left px-3 py-2.5 text-xs font-bold rounded-lg flex items-center gap-2.5 cursor-pointer transition-colors",
-                          activeTab.batchMode && activeTab.testMode !== 'load' ? "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30" : "text-slate-300 hover:bg-[#182235]"
+                          activeTab.batchMode && activeTab.testMode !== 'load'
+                            ? (theme === 'light' ? "bg-cyan-50 text-cyan-700 border border-cyan-200" : "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30")
+                            : (theme === 'light' ? "text-slate-700 hover:bg-slate-50" : "text-slate-300 hover:${theme === 'light' ? 'bg-slate-100' : 'bg-[#182235]'}")
                         )}
                       >
-                        <div className={cn("p-1.5 rounded-md", activeTab.batchMode && activeTab.testMode !== 'load' ? "bg-cyan-500/20 text-cyan-400" : "bg-slate-800 text-slate-400")}>
+                        <div className={cn("p-1.5 rounded-md", activeTab.batchMode && activeTab.testMode !== 'load' ? (theme === 'light' ? "bg-cyan-100 text-cyan-600" : "bg-cyan-500/20 text-cyan-400") : (theme === 'light' ? "bg-slate-100 text-slate-500" : "bg-slate-800 text-slate-400"))}>
                           <Activity size={14} />
                         </div>
                         <div className="flex flex-col">
-                          <span className="font-bold text-cyan-400">Concurrent Batch (Race)</span>
-                          <span className="text-[10px] text-slate-400 font-normal">Multi-iteration concurrent race testing</span>
+                          <span className={cn("font-bold", theme === 'light' ? "text-cyan-700" : "text-cyan-400")}>Batch & Race</span>
+                          <span className={cn("text-[10px] font-normal", theme === 'light' ? "text-slate-500" : "text-slate-400")}>Concurrent batch testing</span>
                         </div>
-                        {activeTab.batchMode && activeTab.testMode !== 'load' && <Check size={16} className="ml-auto text-cyan-400" />}
+                        {activeTab.batchMode && activeTab.testMode !== 'load' && <Check size={16} className={cn("ml-auto", theme === 'light' ? "text-cyan-600" : "text-cyan-400")} />}
                       </button>
 
                       <button
@@ -590,18 +545,18 @@ export function ApiClientWorkspace({
                         className={cn(
                           "w-full text-left px-3 py-2.5 text-xs font-bold rounded-lg flex items-center gap-2.5 cursor-pointer transition-colors",
                           activeTab.testMode === 'load'
-                            ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
-                            : "text-slate-300 hover:bg-[#182235]"
+                            ? (theme === 'light' ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-amber-500/15 text-amber-400 border border-amber-500/30")
+                            : (theme === 'light' ? "text-slate-700 hover:bg-slate-50" : "text-slate-300 hover:${theme === 'light' ? 'bg-slate-100' : 'bg-[#182235]'}")
                         )}
                       >
-                        <div className={cn("p-1.5 rounded-md", activeTab.testMode === 'load' ? "bg-amber-500/20 text-amber-400" : "bg-slate-800 text-amber-400")}>
+                        <div className={cn("p-1.5 rounded-md", activeTab.testMode === 'load' ? (theme === 'light' ? "bg-amber-100 text-amber-600" : "bg-amber-500/20 text-amber-400") : (theme === 'light' ? "bg-slate-100 text-slate-500" : "bg-slate-800 text-slate-400"))}>
                           <Flame size={14} />
                         </div>
                         <div className="flex flex-col">
-                          <span className="font-bold text-amber-400">Autocannon Benchmark</span>
-                          <span className="text-[10px] text-slate-400 font-normal">High-throughput socket benchmark</span>
+                          <span className={cn("font-bold", theme === 'light' ? "text-amber-600" : "text-amber-400")}>Concurrent API Test</span>
+                          <span className={cn("text-[10px] font-normal", theme === 'light' ? "text-slate-500" : "text-slate-400")}>Autocannon benchmark</span>
                         </div>
-                        {activeTab.testMode === 'load' && <Check size={16} className="ml-auto text-amber-400" />}
+                        {activeTab.testMode === 'load' && <Check size={16} className={cn("ml-auto", theme === 'light' ? "text-amber-600" : "text-amber-400")} />}
                       </button>
                     </div>
                   </div>
@@ -611,102 +566,8 @@ export function ApiClientWorkspace({
           </div>
         </div>
 
-        {/* Inline Autocannon Benchmark Mode Bar */}
-        {activeTab.testMode === 'load' && !activeTab.batchMode && (
-          <div className="flex bg-[#120E0A] border-b border-amber-900/40 px-3 py-2 shrink-0 items-center justify-between text-xs font-mono select-none">
-            <div className="flex items-center gap-3">
-              <span className="text-amber-400 font-black tracking-wider flex items-center gap-2 bg-amber-950/60 px-2.5 py-1 rounded-md border border-amber-500/30 shadow-inner">
-                <Flame size={14} className="text-amber-400 fill-amber-400/20" /> AUTOCANNON BENCHMARK
-              </span>
-              <div className="h-4 w-px bg-slate-700/50" />
-              <div className="flex items-center gap-3 text-slate-300 text-[11px]">
-                <span className="font-bold text-amber-300">{activeTab.testConfig?.connections || 50} Sockets</span>
-                <span className="text-slate-600">•</span>
-                <span className="font-bold text-amber-300">{activeTab.testConfig?.duration || 10}s Duration</span>
-                <span className="text-slate-600">•</span>
-                <span className="font-bold text-amber-300">{activeTab.testConfig?.pipelining || 1}x Pipe</span>
-                {(activeTab.testConfig?.warmupDuration || 0) > 0 && (
-                  <>
-                    <span className="text-slate-600">•</span>
-                    <span className="font-bold text-rose-300">{activeTab.testConfig?.warmupDuration}s Warmup</span>
-                  </>
-                )}
-                {activeTab.testConfig?.isRateLimited && activeTab.testConfig?.rateLimit && (
-                  <>
-                    <span className="text-slate-600">•</span>
-                    <span className="font-bold text-cyan-300">{activeTab.testConfig.rateLimit} RPS Cap</span>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setActiveRequestTab('loadSettings')}
-                className="text-[10.5px] text-amber-400 hover:text-amber-300 underline underline-offset-2 cursor-pointer font-bold"
-              >
-                Configure Benchmark
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  updateActiveTab({ testMode: 'functional' });
-                  if (activeRequestTab === 'loadSettings') setActiveRequestTab('params');
-                }}
-                className="text-[10.5px] text-slate-400 hover:text-slate-200 px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 border border-slate-700 cursor-pointer"
-                title="Switch back to standard single request"
-              >
-                Exit Benchmark Mode
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Inline Batch Config Bar */}
-        {activeTab.batchMode && (
-          <div className="flex bg-[#0D121B] border-b border-cyan-900/50 px-3 py-2 shrink-0 items-center justify-between text-xs font-mono select-none">
-            <div className="flex items-center gap-3">
-              <span className="text-cyan-400 font-black tracking-wider flex items-center gap-2 bg-cyan-950/50 px-2 py-1 rounded shadow-inner">
-                <Activity size={14} /> BATCH MODE
-              </span>
-              <div className="h-4 w-px bg-slate-700/50" />
-              <div className="flex items-center gap-2 text-slate-300">
-                <span className="opacity-70 font-semibold uppercase text-[10px]">Iterations:</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="1000"
-                  value={activeTab.batchIterations || 10}
-                  onChange={(e) => updateActiveTab({ batchIterations: parseInt(e.target.value, 10) || 10 })}
-                  className="bg-slate-900 border border-slate-700 rounded px-2 py-1 w-16 text-cyan-400 font-bold outline-none text-center"
-                />
-              </div>
-              <div className="flex items-center gap-2 text-slate-300">
-                <span className="opacity-70 font-semibold uppercase text-[10px]">Concurrency:</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={activeTab.batchConcurrency || 5}
-                  onChange={(e) => updateActiveTab({ batchConcurrency: parseInt(e.target.value, 10) || 5 })}
-                  className="bg-slate-900 border border-slate-700 rounded px-2 py-1 w-16 text-cyan-400 font-bold outline-none text-center"
-                />
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                updateActiveTab({ batchMode: false, testMode: 'functional' });
-                if (activeRequestTab === 'batch') setActiveRequestTab('params');
-              }}
-              className="text-slate-500 hover:text-slate-300 flex items-center gap-1 text-[10px] uppercase font-bold cursor-pointer"
-            >
-              <X size={13} /> Exit Batch Mode
-            </button>
-          </div>
-        )}
-
         {/* Request Sub-Tabs Bar */}
-        <div className="flex bg-[#0A0D14] border-b border-slate-850 px-3 shrink-0 overflow-x-auto custom-scrollbar select-none">
+        <div className={cn('flex border-b border-slate-850 px-3 shrink-0 overflow-x-auto custom-scrollbar select-none', theme === 'light' ? 'bg-slate-100' : 'bg-[#0A0D14]')}>
           {[
             { id: 'params', label: `Params ${queryParams.length > 0 ? `(${queryParams.length})` : ''}`, icon: List },
             { id: 'headers', label: `Headers (${activeTab.headersList.length})`, icon: Code },
@@ -715,7 +576,7 @@ export function ApiClientWorkspace({
             { id: 'assertions', label: `Assertions (${activeTab.assertions?.length || 0})`, icon: CheckCircle2 },
             { id: 'extractors', label: `Extractors (${activeTab.extractors?.length || 0})`, icon: Layers },
             ...(activeTab.batchMode ? [{ id: 'batch', label: `Batch & Race`, icon: Activity }] : []),
-            ...(activeTab.testMode === 'load' && !activeTab.batchMode ? [{ id: 'loadSettings', label: `Autocannon Benchmark`, icon: Flame }] : []),
+            ...(activeTab.testMode === 'load' && !activeTab.batchMode ? [{ id: 'loadSettings', label: `Benchmark Config`, icon: Flame }] : []),
           ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeRequestTab === tab.id;
@@ -751,7 +612,7 @@ export function ApiClientWorkspace({
         </div>
 
         {/* Tab Sub-Panels */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-[#0B0D13]">
+        <div className={cn('flex-1 flex flex-col overflow-y-auto p-4 space-y-4 custom-scrollbar', theme === 'light' ? 'bg-slate-50' : 'bg-[#0B0D13]')}>
           
           {/* TAB 1: URL QUERY PARAMS */}
           {activeRequestTab === 'params' && (
@@ -768,7 +629,7 @@ export function ApiClientWorkspace({
                     const updated = hasQuery ? `${currentUrl}&param=${Date.now()}` : `${currentUrl}?param=${Date.now()}`;
                     updateActiveConfig({ url: updated });
                   }}
-                  className="text-emerald-400 hover:text-white transition-colors p-1 px-2.5 bg-[#141C2B] hover:bg-slate-800 rounded-lg shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-bold border border-slate-700/50"
+                  className="text-emerald-400 hover:text-white transition-colors p-1 px-2.5 ${theme === 'light' ? 'bg-white' : 'bg-[#141C2B]'} hover:bg-slate-800 rounded-lg shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-bold border border-slate-700/50"
                 >
                   <Plus size={12} /> ADD PARAM
                 </button>
@@ -776,12 +637,12 @@ export function ApiClientWorkspace({
 
               <div className="space-y-2">
                 {queryParams.length === 0 ? (
-                  <div className="text-center p-6 bg-[#07090E] border border-slate-850 border-dashed rounded-xl text-slate-500 text-xs font-mono">
+                  <div className="text-center p-6 ${theme === 'light' ? 'bg-white' : 'bg-[#07090E]'} border border-slate-850 border-dashed rounded-xl text-slate-500 text-xs font-mono">
                     No query parameters in URL. Append ?key=value or click <strong className="text-emerald-400">ADD PARAM</strong>.
                   </div>
                 ) : (
                   queryParams.map((p, idx) => (
-                    <div key={idx} className="flex items-center gap-2 bg-[#07090E] p-2 rounded-lg border border-slate-850 font-mono text-xs">
+                    <div key={idx} className="flex items-center gap-2 ${theme === 'light' ? 'bg-white' : 'bg-[#07090E]'} p-2 rounded-lg border border-slate-850 font-mono text-xs">
                       <input
                         type="text"
                         value={p.key}
@@ -791,7 +652,7 @@ export function ApiClientWorkspace({
                           updateUrlWithParams(next);
                         }}
                         placeholder="Key"
-                        className="flex-1 bg-[#10141F] border border-slate-800 rounded px-2.5 py-1.5 text-emerald-400 outline-none text-xs"
+                        className="flex-1 ${theme === 'light' ? 'bg-white' : 'bg-[#10141F]'} border border-slate-800 rounded px-2.5 py-1.5 text-emerald-400 outline-none text-xs"
                       />
                       <span className="text-slate-600 font-bold">=</span>
                       <input
@@ -803,7 +664,7 @@ export function ApiClientWorkspace({
                           updateUrlWithParams(next);
                         }}
                         placeholder="Value"
-                        className="flex-1 bg-[#10141F] border border-slate-800 rounded px-2.5 py-1.5 text-slate-200 outline-none text-xs"
+                        className="flex-1 ${theme === 'light' ? 'bg-white' : 'bg-[#10141F]'} border border-slate-800 rounded px-2.5 py-1.5 text-slate-200 outline-none text-xs"
                       />
                       <button
                         type="button"
@@ -841,14 +702,14 @@ export function ApiClientWorkspace({
                         });
                       }
                     }}
-                    className="text-[10px] font-mono text-slate-400 hover:text-slate-200 bg-[#141C2B] px-2 py-1 rounded border border-slate-700/50 cursor-pointer"
+                    className="text-[10px] font-mono text-slate-400 hover:text-slate-200 ${theme === 'light' ? 'bg-white' : 'bg-[#141C2B]'} px-2 py-1 rounded border border-slate-700/50 cursor-pointer"
                   >
                     + JSON Header
                   </button>
                   <button 
                     type="button"
                     onClick={() => updateActiveTab({ headersList: [...activeTab.headersList, { id: uuidv4(), key: '', value: '' }] })}
-                    className="text-emerald-400 hover:text-white transition-colors p-1 px-2.5 bg-[#141C2B] hover:bg-slate-800 rounded-lg shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-bold border border-slate-700/50"
+                    className="text-emerald-400 hover:text-white transition-colors p-1 px-2.5 ${theme === 'light' ? 'bg-white' : 'bg-[#141C2B]'} hover:bg-slate-800 rounded-lg shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-bold border border-slate-700/50"
                   >
                     <Plus size={12} /> ADD HEADER
                   </button>
@@ -882,10 +743,10 @@ export function ApiClientWorkspace({
           {activeRequestTab === 'body' && (
             <section className="space-y-3 animate-fadeIn">
               {activeTab.config.method === 'GRAPHQL' ? (
-                <div className="border border-slate-850 rounded-xl overflow-hidden bg-[#07090E] flex flex-col shadow-inner">
+                <div className="border border-slate-850 rounded-xl overflow-hidden ${theme === 'light' ? 'bg-white' : 'bg-[#07090E]'} flex flex-col shadow-inner">
                   {/* Query Pane */}
                   <div className="relative flex flex-col shrink-0" style={{ height: `${graphqlQueryHeight}px` }}>
-                    <div className="px-3.5 py-2 bg-[#0E121B] border-b border-slate-850 select-none flex items-center justify-between shrink-0">
+                    <div className="px-3.5 py-2 ${theme === 'light' ? 'bg-white' : 'bg-[#0E121B]'} border-b border-slate-850 select-none flex items-center justify-between shrink-0">
                       <span className="text-[10px] uppercase font-black text-violet-400 tracking-wider flex items-center gap-2 font-mono">
                         <Layers size={12} className="text-violet-400" /> GraphQL Query
                       </span>
@@ -943,7 +804,7 @@ export function ApiClientWorkspace({
 
                   {/* Variables Pane */}
                   <div className="relative flex flex-col shrink-0" style={{ height: `${graphqlVariablesHeight}px` }}>
-                    <div className="px-3.5 py-2 bg-[#0E121B] border-b border-slate-850 select-none flex items-center justify-between shrink-0">
+                    <div className="px-3.5 py-2 ${theme === 'light' ? 'bg-white' : 'bg-[#0E121B]'} border-b border-slate-850 select-none flex items-center justify-between shrink-0">
                       <span className="text-[10px] uppercase font-black text-blue-400 tracking-wider flex items-center gap-2 font-mono">
                         <Database size={11} className="text-blue-400" /> Variables JSON
                       </span>
@@ -982,18 +843,18 @@ export function ApiClientWorkspace({
                       <label className="text-xs uppercase font-black text-slate-400 tracking-wider flex items-center gap-2 font-mono">
                         <FileJson size={12} className="text-emerald-400" /> Request Payload
                       </label>
-                      <div className="flex bg-[#141C2B] rounded-lg p-0.5 border border-slate-800">
+                      <div className="flex ${theme === 'light' ? 'bg-white' : 'bg-[#141C2B]'} rounded-lg p-0.5 border border-slate-800">
                         <button
                           type="button"
                           onClick={() => updateActiveTab({ bodyType: 'json' })}
-                          className={cn("px-3 py-1 rounded text-[10px] font-bold uppercase transition-colors cursor-pointer", (!activeTab.bodyType || activeTab.bodyType === 'json') ? "bg-slate-800 text-white" : "text-slate-500 hover:text-slate-300")}
+                          className={cn("px-3 py-1 rounded text-[10px] font-bold uppercase transition-colors cursor-pointer", (!activeTab.bodyType || activeTab.bodyType === 'json') ? (theme === 'light' ? 'bg-slate-200 text-slate-900' : 'bg-slate-800 text-white') : (theme === 'light' ? 'text-slate-500 hover:text-slate-700' : 'text-slate-500 hover:text-slate-300'))}
                         >
                           Raw / JSON
                         </button>
                         <button
                           type="button"
                           onClick={() => updateActiveTab({ bodyType: 'binary' })}
-                          className={cn("px-3 py-1 rounded text-[10px] font-bold uppercase transition-colors cursor-pointer", activeTab.bodyType === 'binary' ? "bg-slate-800 text-white" : "text-slate-500 hover:text-slate-300")}
+                          className={cn("px-3 py-1 rounded text-[10px] font-bold uppercase transition-colors cursor-pointer", activeTab.bodyType === 'binary' ? (theme === 'light' ? 'bg-slate-200 text-slate-900' : 'bg-slate-800 text-white') : (theme === 'light' ? 'text-slate-500 hover:text-slate-700' : 'text-slate-500 hover:text-slate-300'))}
                         >
                           Binary File
                         </button>
@@ -1018,7 +879,7 @@ export function ApiClientWorkspace({
                   </div>
                   <div className="relative flex flex-col" style={{ height: `${payloadJsonHeight}px` }}>
                     {activeTab.bodyType === 'binary' ? (
-                      <div className="w-full flex-1 bg-[#07090E] border border-slate-850 rounded-t-xl p-6 flex flex-col items-center justify-center border-dashed gap-4 group">
+                      <div className="w-full flex-1 ${theme === 'light' ? 'bg-white' : 'bg-[#07090E]'} border border-slate-850 rounded-t-xl p-6 flex flex-col items-center justify-center border-dashed gap-4 group">
                         <UploadCloud size={32} className="text-slate-600 group-hover:text-emerald-400 transition-colors" />
                         <div className="text-center space-y-1">
                           <p className="text-sm font-bold text-slate-300">Upload Binary File</p>
@@ -1083,13 +944,13 @@ export function ApiClientWorkspace({
                       <textarea
                         value={activeTab.config.body}
                         onChange={(e) => updateActiveConfig({ body: e.target.value })}
-                        className="w-full flex-1 bg-[#07090E] border border-slate-850 rounded-t-xl p-3.5 font-mono text-xs text-emerald-400 outline-none resize-none focus:border-emerald-500/40 leading-relaxed shadow-inner"
+                        className="w-full flex-1 ${theme === 'light' ? 'bg-white' : 'bg-[#07090E]'} border border-slate-850 rounded-t-xl p-3.5 font-mono text-xs text-emerald-400 outline-none resize-none focus:border-emerald-500/40 leading-relaxed shadow-inner"
                         placeholder='{ "key": "value" }'
                       />
                     )}
                     <div 
                       onMouseDown={startResizePayloadJson}
-                      className="h-2 hover:h-2.5 bg-[#121622] cursor-row-resize flex items-center justify-center transition-all group z-10 rounded-b-xl shrink-0 border-t border-slate-800"
+                      className="h-2 hover:h-2.5 ${theme === 'light' ? 'bg-slate-100' : 'bg-[#121622]'} cursor-row-resize flex items-center justify-center transition-all group z-10 rounded-b-xl shrink-0 border-t border-slate-800"
                       title="Drag to resize Payload box"
                     >
                       <div className="h-[2px] w-12 bg-slate-700 group-hover:bg-emerald-400 rounded" />
@@ -1108,7 +969,7 @@ export function ApiClientWorkspace({
                   <ShieldCheck size={12} className="text-emerald-400" /> Authentication
                 </label>
               </div>
-              <div className="bg-[#07090E] p-4 rounded-xl border border-slate-850 font-mono text-xs space-y-3.5">
+              <div className="${theme === 'light' ? 'bg-white' : 'bg-[#07090E]'} p-4 rounded-xl border border-slate-850 font-mono text-xs space-y-3.5">
                 <div className="flex flex-col gap-1">
                   <label className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Auth Type</label>
                   <select
@@ -1125,7 +986,7 @@ export function ApiClientWorkspace({
                         }
                       });
                     }}
-                    className="w-full bg-[#10141F] border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-bold focus:border-emerald-500/40 text-xs"
+                    className="w-full ${theme === 'light' ? 'bg-white' : 'bg-[#10141F]'} border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-bold focus:border-emerald-500/40 text-xs"
                   >
                     <option value="none">No Auth (Inherited / Public)</option>
                     <option value="oauth2_client">OAuth 2.0 (Client Credentials Flow)</option>
@@ -1152,7 +1013,7 @@ export function ApiClientWorkspace({
                             });
                           }}
                           placeholder="CLIENT_ID"
-                          className="w-full bg-[#10141F] border border-slate-800 rounded px-2.5 py-1.5 text-emerald-400 text-xs"
+                          className="w-full ${theme === 'light' ? 'bg-white' : 'bg-[#10141F]'} border border-slate-800 rounded px-2.5 py-1.5 text-emerald-400 text-xs"
                         />
                       </div>
                       <div>
@@ -1169,7 +1030,7 @@ export function ApiClientWorkspace({
                             });
                           }}
                           placeholder="••••••••••••"
-                          className="w-full bg-[#10141F] border border-slate-800 rounded px-2.5 py-1.5 text-emerald-400 text-xs"
+                          className="w-full ${theme === 'light' ? 'bg-white' : 'bg-[#10141F]'} border border-slate-800 rounded px-2.5 py-1.5 text-emerald-400 text-xs"
                         />
                       </div>
                     </div>
@@ -1189,64 +1050,59 @@ export function ApiClientWorkspace({
                 <button 
                   type="button"
                   onClick={() => addAssertion({ id: uuidv4(), type: 'status', value: '200' })}
-                  className="text-emerald-400 hover:text-white transition-colors p-1 px-2.5 bg-[#141C2B] hover:bg-slate-800 rounded-lg shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-bold border border-slate-700/50"
+                  className="text-emerald-400 hover:text-white transition-colors p-1 px-2.5 ${theme === 'light' ? 'bg-white' : 'bg-[#141C2B]'} hover:bg-slate-800 rounded-lg shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-bold border border-slate-700/50"
                 >
                   <Plus size={12} /> ADD RULE
                 </button>
               </div>
 
-              <div className="space-y-2">
+              <div className="flex flex-col border border-slate-800 rounded-xl overflow-hidden ${theme === 'light' ? 'bg-white' : 'bg-[#07090E]'}">
                 {(!activeTab.assertions || activeTab.assertions.length === 0) ? (
-                  <div className="text-center p-6 bg-[#07090E] border border-slate-850 border-dashed rounded-xl text-slate-500 text-xs font-mono">
+                  <div className="text-center p-6 text-slate-500 text-xs font-mono">
                     No active assertions. Add status code (e.g. 200) or latency checks.
                   </div>
                 ) : (
-                  activeTab.assertions.map((rule) => (
-                    <div key={rule.id} className="flex flex-col gap-2 bg-[#07090E] p-3 rounded-xl border border-slate-850 font-mono text-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Rule Matcher</span>
-                        <button
-                          type="button"
-                          onClick={() => removeAssertion(rule.id)}
-                          className="text-slate-500 hover:text-rose-400 p-1 cursor-pointer"
-                        >
-                          <X size={13} />
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <div className="divide-y divide-slate-800/60">
+                    {activeTab.assertions.map((rule) => (
+                      <div key={rule.id} className="flex items-center gap-2 p-2">
                         <select
                           value={rule.type}
                           onChange={(e) => updateAssertion(rule.id, { type: e.target.value as any, value: e.target.value === 'graphql_no_errors' ? '' : rule.value })}
-                          className="w-full bg-[#10141F] border border-slate-800 rounded px-2.5 py-1.5 text-slate-300 font-bold text-xs"
+                          className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-300 font-mono text-xs outline-none w-40 shrink-0 cursor-pointer"
                         >
-                          <option value="status">HTTP Status Code</option>
-                          <option value="latency">Max Latency SLA (ms)</option>
-                          <option value="body_contains">Body contains string</option>
-                          <option value="json_path">JSON Path matcher</option>
-                          <option value="header_matches">Header key/value match</option>
+                          <option value="status">Status Code</option>
+                          <option value="latency">Max Latency (ms)</option>
+                          <option value="body_contains">Body Contains</option>
+                          <option value="json_path">JSON Path</option>
+                          <option value="header_matches">Header Matches</option>
                         </select>
-
                         <input
                           type="text"
                           value={rule.value}
                           onChange={(e) => updateAssertion(rule.id, { value: e.target.value })}
                           placeholder={
-                            rule.type === 'status' ? "e.g. 200 or 2xx" :
+                            rule.type === 'status' ? "e.g. 200" :
                             rule.type === 'latency' ? "e.g. 500" :
                             rule.type === 'body_contains' ? "expected text" : "expected value"
                           }
-                          className="w-full bg-[#10141F] border border-slate-800 rounded px-2.5 py-1.5 text-emerald-400 placeholder-slate-600 outline-none text-xs"
+                          className="flex-1 bg-transparent border-b border-transparent focus:border-emerald-500 text-emerald-400 placeholder-slate-600 outline-none text-xs font-mono px-2 py-1 transition-colors"
                         />
+                        <button
+                          type="button"
+                          onClick={() => removeAssertion(rule.id)}
+                          className="text-slate-500 hover:text-rose-400 p-1.5 cursor-pointer rounded hover:bg-slate-800 transition-colors"
+                        >
+                          <X size={14} />
+                        </button>
                       </div>
-                    </div>
-                  ))
+                    ))}
+                  </div>
                 )}
               </div>
             </section>
           )}
 
-          {/* TAB 6: EXTRACTORS */}
+          
           {activeRequestTab === 'extractors' && (
             <section className="space-y-3 animate-fadeIn">
               <div className="flex items-center justify-between select-none">
@@ -1259,19 +1115,19 @@ export function ApiClientWorkspace({
                     const nextExtractors = activeTab.extractors ? [...activeTab.extractors] : [];
                     updateActiveTab({ extractors: [...nextExtractors, { id: uuidv4(), jsonPath: '', variableName: '' }] });
                   }}
-                  className="text-emerald-400 hover:text-white transition-colors p-1 px-2.5 bg-[#141C2B] hover:bg-slate-800 rounded-lg shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-bold border border-slate-700/50"
+                  className="text-emerald-400 hover:text-white transition-colors p-1 px-2.5 ${theme === 'light' ? 'bg-white' : 'bg-[#141C2B]'} hover:bg-slate-800 rounded-lg shadow-sm cursor-pointer flex items-center gap-1 text-[10px] font-mono font-bold border border-slate-700/50"
                 >
                   <Plus size={12} /> ADD EXTRACTOR
                 </button>
               </div>
               <div className="space-y-2">
                 {(!activeTab.extractors || activeTab.extractors.length === 0) ? (
-                  <div className="text-center p-6 bg-[#07090E] border border-slate-850 border-dashed rounded-xl text-slate-500 text-xs font-mono">
+                  <div className="text-center p-6 ${theme === 'light' ? 'bg-white' : 'bg-[#07090E]'} border border-slate-850 border-dashed rounded-xl text-slate-500 text-xs font-mono">
                     No chained extractors configured. Map response JSON path to environment variables.
                   </div>
                 ) : (
                   activeTab.extractors.map((ext) => (
-                    <div key={ext.id} className="flex gap-2 bg-[#07090E] p-3 rounded-xl border border-slate-850 font-mono text-xs items-center">
+                    <div key={ext.id} className="flex gap-2 ${theme === 'light' ? 'bg-white' : 'bg-[#07090E]'} p-3 rounded-xl border border-slate-850 font-mono text-xs items-center">
                       <div className="flex-1 grid grid-cols-2 gap-2">
                         <input
                           type="text"
@@ -1281,7 +1137,7 @@ export function ApiClientWorkspace({
                             updateActiveTab({ extractors: updatedList });
                           }}
                           placeholder="JSON Path e.g. token"
-                          className="w-full bg-[#10141F] border border-slate-800 rounded px-2.5 py-1.5 text-emerald-400 outline-none text-xs"
+                          className="w-full ${theme === 'light' ? 'bg-white' : 'bg-[#10141F]'} border border-slate-800 rounded px-2.5 py-1.5 text-emerald-400 outline-none text-xs"
                         />
                         <input
                           type="text"
@@ -1291,7 +1147,7 @@ export function ApiClientWorkspace({
                             updateActiveTab({ extractors: updatedList });
                           }}
                           placeholder="Target Var e.g. AUTH_TOKEN"
-                          className="w-full bg-[#10141F] border border-slate-800 rounded px-2.5 py-1.5 text-emerald-400 outline-none text-xs"
+                          className="w-full ${theme === 'light' ? 'bg-white' : 'bg-[#10141F]'} border border-slate-800 rounded px-2.5 py-1.5 text-emerald-400 outline-none text-xs"
                         />
                       </div>
                       <button
@@ -1314,40 +1170,9 @@ export function ApiClientWorkspace({
           {/* TAB: CONCURRENT BATCH RUNNER (RACE MODE) */}
           {activeRequestTab === 'batch' && (
             <section className="space-y-4 animate-fadeIn font-mono text-xs">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 select-none bg-[#07090E] p-3.5 rounded-xl border border-cyan-900/40">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/25 shrink-0">
-                    <Activity size={16} />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-slate-200 text-xs tracking-wider uppercase">Concurrent Batch & Race Testing</h4>
-                    <p className="text-[10.5px] text-slate-400 font-sans mt-0.5">
-                      Fires concurrent requests with dynamic variables (<code className="text-cyan-400">{"{{$iteration}}"}</code>, <code className="text-cyan-400">{"{{$uuid}}"}</code>) to inspect each individual response and verify race safety.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => updateActiveTab({ 
-                    batchMode: !activeTab.batchMode,
-                    testMode: !activeTab.batchMode ? 'race' : 'functional'
-                  })}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border select-none shrink-0 self-start sm:self-auto",
-                    activeTab.batchMode 
-                      ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm" 
-                      : "bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200"
-                  )}
-                >
-                  <span className={cn("w-2 h-2 rounded-full", activeTab.batchMode ? "bg-cyan-400 animate-pulse" : "bg-slate-500")} />
-                  {activeTab.batchMode ? 'BATCH MODE ACTIVE' : 'ENABLE BATCH MODE'}
-                </button>
-              </div>
-
               {/* Batch Configuration Sliders */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div className="bg-[#07090E] p-4 rounded-xl border border-slate-850 space-y-2">
+              <div className="flex flex-col gap-3.5">
+                <div className="${theme === 'light' ? 'bg-white' : 'bg-[#07090E]'} p-4 rounded-xl border border-slate-850 space-y-2">
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-slate-400">Total Iterations:</span>
                     <strong className="text-cyan-400 font-black text-sm">{activeTab.batchIterations || 10} requests</strong>
@@ -1380,7 +1205,7 @@ export function ApiClientWorkspace({
                   </div>
                 </div>
 
-                <div className="bg-[#07090E] p-4 rounded-xl border border-slate-850 space-y-2">
+                <div className="${theme === 'light' ? 'bg-white' : 'bg-[#07090E]'} p-4 rounded-xl border border-slate-850 space-y-2">
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-slate-400">Concurrency (Simultaneous Sockets):</span>
                     <strong className="text-cyan-400 font-black text-sm">{activeTab.batchConcurrency || 5} concurrent</strong>
@@ -1414,96 +1239,32 @@ export function ApiClientWorkspace({
                 </div>
               </div>
 
-              {/* Dynamic Variables Guide */}
-              <div className="bg-[#07090E] p-4 rounded-xl border border-slate-850 space-y-2.5">
-                <div className="text-[11px] font-bold text-slate-300 flex items-center justify-between">
-                  <span>Dynamic Iteration Variables</span>
-                  <span className="text-[10px] text-slate-500 font-normal">usable in URL, Headers, and JSON Body</span>
+              {/* CLI Command Bar */}
+              <div className="${theme === 'light' ? 'bg-white' : 'bg-[#0C0F17]'} p-3.5 rounded-xl border border-slate-800 font-mono text-[11px] shadow-inner relative group">
+                <div className="min-h-[6rem] max-h-40 overflow-y-auto whitespace-pre-wrap break-all custom-scrollbar pr-2 text-slate-300">
+                  <span className="text-cyan-500 font-bold mr-2 select-none">$</span>
+                  <span className="select-all leading-relaxed">{batchCliString}</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10.5px]">
-                  <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 flex flex-col gap-0.5">
-                    <code className="text-cyan-400 font-bold">{"{{$iteration}}"}</code>
-                    <span className="text-slate-400 text-[10px]">Current sequential index (1, 2, 3...) per request</span>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 flex flex-col gap-0.5">
-                    <code className="text-cyan-400 font-bold">{"{{$uuid}}"}</code>
-                    <span className="text-slate-400 text-[10px]">Generates a unique UUID v4 string per request</span>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 flex flex-col gap-0.5">
-                    <code className="text-cyan-400 font-bold">{"{{$randomInt}}"}</code>
-                    <span className="text-slate-400 text-[10px]">Generates a random integer (1 - 1000) per request</span>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 flex flex-col gap-0.5">
-                    <code className="text-cyan-400 font-bold">{"{{$timestamp}}"}</code>
-                    <span className="text-slate-400 text-[10px]">Current millisecond UNIX timestamp per request</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Button */}
-              <div className="pt-1 flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => {
-                    updateActiveTab({ batchMode: true, testMode: 'race' });
-                    handleRun();
-                  }}
-                  className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 active:scale-95 text-white font-mono font-black rounded-xl text-xs flex items-center gap-2 transition-all shadow-lg cursor-pointer"
+                  onClick={handleCopyBatchCli}
+                  className={cn(
+                    theme === 'light' 
+                      ? "absolute top-2.5 right-2.5 px-3 py-1.5 rounded-lg bg-white/90 backdrop-blur-sm hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                      : "absolute top-2.5 right-2.5 px-3 py-1.5 rounded-lg bg-[#141824]/90 backdrop-blur-sm hover:bg-[#1C2132] text-slate-300 border border-slate-700 font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm",
+                    !copiedBatchCli && "opacity-0 group-hover:opacity-100"
+                  )}
                 >
-                  <Activity size={14} />
-                  <span>RUN BATCH NOW ({activeTab.batchIterations || 10} REQS @ {activeTab.batchConcurrency || 5} CONCURRENT)</span>
+                  {copiedBatchCli ? <Check size={12} className="text-cyan-400" /> : <Copy size={12} />}
+                  <span>{copiedBatchCli ? 'Copied' : 'Copy CLI'}</span>
                 </button>
               </div>
             </section>
           )}
 
-          {/* TAB 7: AUTOCANNON BENCHMARK CONFIGURATION */}
+          {/* TAB 7: BENCHMARK CONFIGURATION */}
           {activeRequestTab === 'loadSettings' && !activeTab.batchMode && activeTab.testMode === 'load' && (
             <section className="space-y-4 animate-fadeIn text-xs">
-              {/* Header & Mode Switch */}
-              <div className="bg-[#0C0F17] border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 shrink-0 mt-0.5">
-                    <Zap size={18} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-slate-100 font-mono">Autocannon Benchmark</h3>
-                      <span className={cn(
-                        "text-[10px] px-2 py-0.5 rounded font-mono font-bold uppercase",
-                        activeTab.testMode === 'load' 
-                          ? "bg-amber-500/20 text-amber-400 border border-amber-500/40" 
-                          : "bg-slate-800 text-slate-400 border border-slate-700"
-                      )}>
-                        {activeTab.testMode === 'load' ? 'Active Mode' : 'Inactive'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1">
-                      High-concurrency HTTP socket benchmarking to stress test latency and throughput.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    updateActiveTab({ 
-                      testMode: activeTab.testMode === 'load' ? 'functional' : 'load',
-                      batchMode: false 
-                    });
-                  }}
-                  className={cn(
-                    "px-3.5 py-2 rounded-lg font-mono text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0 select-none",
-                    activeTab.testMode === 'load'
-                      ? "bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40"
-                      : "bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
-                  )}
-                >
-                  <Zap size={12} className={activeTab.testMode === 'load' ? "fill-amber-400 text-amber-400" : ""} />
-                  <span>{activeTab.testMode === 'load' ? 'Primary Test Mode' : 'Set as Test Mode'}</span>
-                </button>
-              </div>
-
               {/* Quick Presets */}
               <div className="space-y-2">
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">
@@ -1538,7 +1299,7 @@ export function ApiClientWorkspace({
                           "p-3 rounded-lg text-left transition-all cursor-pointer border flex flex-col justify-between",
                           isCurrent
                             ? "bg-amber-500/10 border-amber-500/40 text-amber-300"
-                            : "bg-[#0C0F17] hover:bg-[#121622] border-slate-800 text-slate-300"
+                            : "${theme === 'light' ? 'bg-white' : 'bg-[#0C0F17]'} hover:${theme === 'light' ? 'bg-slate-100' : 'bg-[#121622]'} border-slate-800 text-slate-300"
                         )}
                       >
                         <div className="flex items-center justify-between font-bold text-xs font-mono">
@@ -1553,7 +1314,7 @@ export function ApiClientWorkspace({
               </div>
 
               {/* Core Parameters */}
-              <div className="bg-[#0C0F17] p-4 rounded-xl border border-slate-800 space-y-4">
+              <div className="${theme === 'light' ? 'bg-white' : 'bg-[#0C0F17]'} p-4 rounded-xl border border-slate-800 space-y-4">
                 <span className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono block border-b border-slate-800 pb-2">
                   Test Parameters
                 </span>
@@ -1649,7 +1410,6 @@ export function ApiClientWorkspace({
                       className="w-full bg-slate-900 border border-slate-700 text-amber-400 font-mono font-bold px-2 py-1 rounded outline-none text-xs"
                       placeholder="1"
                     />
-                    <span className="text-[10px] text-slate-500 block">HTTP/1.1 pipelined requests</span>
                   </div>
 
                   {/* Socket Timeout */}
@@ -1672,7 +1432,6 @@ export function ApiClientWorkspace({
                       className="w-full bg-slate-900 border border-slate-700 text-amber-400 font-mono font-bold px-2 py-1 rounded outline-none text-xs"
                       placeholder="10"
                     />
-                    <span className="text-[10px] text-slate-500 block">Seconds before socket timeout</span>
                   </div>
 
                   {/* Optional Rate Limit (RPS) */}
@@ -1714,80 +1473,73 @@ export function ApiClientWorkspace({
                       )}
                       placeholder="Uncapped"
                     />
-                    <span className="text-[10px] text-slate-500 block">Optional max req/sec rate</span>
                   </div>
                 </div>
               </div>
 
               {/* CLI Command Bar */}
-              <div className="bg-[#0C0F17] p-3 rounded-lg border border-slate-800 flex items-center justify-between gap-2 font-mono text-xs">
-                <div className="truncate text-slate-400 select-all">
-                  <span className="text-amber-400 font-bold">$ </span>
-                  {autocannonCliString}
+              <div className="${theme === 'light' ? 'bg-white' : 'bg-[#0C0F17]'} p-3.5 rounded-xl border border-slate-800 font-mono text-[11px] shadow-inner relative group">
+                <div className="min-h-[6rem] max-h-40 overflow-y-auto whitespace-pre-wrap break-all custom-scrollbar pr-2 text-slate-300">
+                  <span className="text-amber-500 font-bold mr-2 select-none">$</span>
+                  <span className="select-all leading-relaxed">{autocannonCliString}</span>
                 </div>
                 <button
                   type="button"
                   onClick={handleCopyAutocannonCli}
-                  className="px-2.5 py-1 rounded bg-[#121622] hover:bg-slate-800 text-slate-300 border border-slate-700 text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0"
-                >
-                  {copiedAutocannonCli ? <Check size={11} className="text-amber-400" /> : <Copy size={11} />}
-                  <span>{copiedAutocannonCli ? 'Copied' : 'Copy CLI'}</span>
-                </button>
-              </div>
-
-              {/* Direct Action Button */}
-              <div className="pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    updateActiveTab({ testMode: 'load', batchMode: false });
-                    if (activeTab.loading) {
-                      if (handleAbortAutocannon) handleAbortAutocannon();
-                      else handleAbort();
-                    } else {
-                      handleRun();
-                    }
-                  }}
                   className={cn(
-                    "w-full py-3 rounded-xl font-mono font-bold text-xs tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md active:scale-98 select-none",
-                    activeTab.loading && activeTab.testMode === 'load'
-                      ? "bg-rose-700 hover:bg-rose-650 text-white"
-                      : "bg-amber-500 hover:bg-amber-400 text-slate-950 font-black"
+                    theme === 'light' 
+                      ? "absolute top-2.5 right-2.5 px-3 py-1.5 rounded-lg bg-white/90 backdrop-blur-sm hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                      : "absolute top-2.5 right-2.5 px-3 py-1.5 rounded-lg bg-[#141824]/90 backdrop-blur-sm hover:bg-[#1C2132] text-slate-300 border border-slate-700 font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm",
+                    !copiedAutocannonCli && "opacity-0 group-hover:opacity-100"
                   )}
                 >
-                  {activeTab.loading && activeTab.testMode === 'load' ? (
-                    <>
-                      <RefreshCw size={14} className="animate-spin" />
-                      <span>STOP BENCHMARK EXECUTION</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play size={13} className="fill-slate-950" />
-                      <span>START LOAD BENCHMARK ({activeTab.testConfig?.connections || 50} Sockets • {activeTab.testConfig?.duration || 10}s)</span>
-                    </>
-                  )}
+                  {copiedAutocannonCli ? <Check size={12} className="text-amber-400" /> : <Copy size={12} />}
+                  <span>{copiedAutocannonCli ? 'Copied' : 'Copy CLI'}</span>
                 </button>
               </div>
             </section>
           )}
-
+          {/* Single Request CLI - Bottom Pinned */}
+          {(!activeTab.batchMode && activeTab.testMode !== 'load' && activeRequestTab !== 'batch' && activeRequestTab !== 'loadSettings') && (
+            <div className="mt-auto pt-4">
+              <div className={cn('p-3.5 rounded-xl border border-slate-800 font-mono text-[11px] shadow-inner relative group', theme === 'light' ? 'bg-white' : 'bg-[#0C0F17]')} >
+                <div className="min-h-[6rem] max-h-40 overflow-y-auto whitespace-pre-wrap break-all custom-scrollbar pr-2 text-slate-300">
+                  <span className="text-emerald-500 font-bold mr-2 select-none">$</span>
+                  <span className="select-all leading-relaxed">{singleCliString}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopySingleCli}
+                  className={cn(
+                    theme === 'light' 
+                      ? "absolute top-2.5 right-2.5 px-3 py-1.5 rounded-lg bg-white/90 backdrop-blur-sm hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                      : "absolute top-2.5 right-2.5 px-3 py-1.5 rounded-lg bg-[#141824]/90 backdrop-blur-sm hover:bg-[#1C2132] text-slate-300 border border-slate-700 font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm",
+                    !copiedSingleCli && "opacity-0 group-hover:opacity-100"
+                  )}
+                >
+                  {copiedSingleCli ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                  <span>{copiedSingleCli ? 'Copied' : 'Copy CLI'}</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Vertical split draggable slider resizer bar */}
       <div 
         onMouseDown={() => setIsDraggingSplit(true)}
-        className="hidden lg:flex w-1.5 hover:w-1.5 bg-[#0B0D13] hover:bg-emerald-500 cursor-col-resize items-center justify-center transition-all shrink-0 border-x border-slate-850 group z-20"
+        className="hidden lg:flex w-1.5 hover:w-1.5 ${theme === 'light' ? 'bg-slate-50' : 'bg-[#0B0D13]'} hover:bg-emerald-500 cursor-col-resize items-center justify-center transition-all shrink-0 border-x border-slate-850 group z-20"
         title="Drag left or right to resize panels"
       >
         <div className="w-[1.5px] h-12 bg-slate-700 group-hover:bg-emerald-300 rounded" />
       </div>
 
-      {/* RHS: Mode-Adaptive Chrome DevTools Network Inspector & Benchmarks */}
+      {/* RHS: Mode-Adaptive Inspector & Benchmarks */}
       <div 
         style={windowWidth >= 1024 ? resolvedRightWidthStyle : undefined}
         className={cn(
-          "flex flex-col bg-[#07090E] overflow-hidden",
+          "flex flex-col ${theme === 'light' ? 'bg-white' : 'bg-[#07090E]'} overflow-hidden",
           windowWidth >= 1024 ? "w-auto lg:flex-1 h-full border-t lg:border-t-0 border-slate-850" : (activeMobilePanel === 'response' ? "w-full flex-1" : "hidden")
         )}
       >
@@ -1816,6 +1568,7 @@ export function ApiClientWorkspace({
             progress={activeTab.progress} 
             concurrency={activeTab.testConfig?.concurrency || activeTab.batchConcurrency || 5} 
             onAbort={handleAbort} 
+            onClear={() => updateActiveTab({ batchResults: [], labResults: {} })}
             theme={theme}
           />
         ) : (

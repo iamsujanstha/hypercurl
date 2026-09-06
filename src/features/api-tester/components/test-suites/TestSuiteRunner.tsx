@@ -623,22 +623,20 @@ export function TestSuiteRunner({
           <button
             type="button"
             onClick={() => setIsCreatingSuite(true)}
-            className="p-1.5 rounded-lg bg-[#141822] hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-750 transition-all cursor-pointer text-xs flex items-center gap-1 font-mono"
+            className="p-1.5 rounded-lg bg-[#141822] hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-750 transition-all cursor-pointer text-xs flex items-center justify-center font-mono w-8 h-8"
             title="Create a new automated test suite"
           >
-            <Plus size={14} className="text-cyan-400" />
-            <span className="hidden md:inline">NEW_SUITE</span>
+            <Plus size={15} className="text-cyan-400" />
           </button>
 
           {/* Import Tabs as Suite */}
           <button
             type="button"
             onClick={handleImportTabsAsSuite}
-            className="p-1.5 rounded-lg bg-[#141822] hover:bg-slate-800 text-slate-300 hover:text-emerald-400 border border-slate-750 transition-all cursor-pointer text-xs flex items-center gap-1 font-mono"
+            className="p-1.5 rounded-lg bg-[#141822] hover:bg-slate-800 text-slate-300 hover:text-emerald-400 border border-slate-750 transition-all cursor-pointer text-xs flex items-center justify-center font-mono w-8 h-8"
             title="Import all open API Studio tabs as an automated sequential test suite"
           >
-            <Sparkles size={14} className="text-emerald-400" />
-            <span className="hidden md:inline">IMPORT_TABS</span>
+            <Sparkles size={15} className="text-emerald-400" />
           </button>
 
           {/* Reset to Standard Defaults */}
@@ -649,11 +647,10 @@ export function TestSuiteRunner({
               setActiveSuiteId(DEFAULT_TEST_SUITES[0].id);
               setSuiteRunResult(null);
             }}
-            className="p-1.5 rounded-lg bg-[#141822] hover:bg-slate-800 text-slate-400 hover:text-cyan-300 border border-slate-750 transition-all cursor-pointer text-xs flex items-center gap-1 font-mono"
+            className="p-1.5 rounded-lg bg-[#141822] hover:bg-slate-800 text-slate-400 hover:text-cyan-300 border border-slate-750 transition-all cursor-pointer text-xs flex items-center justify-center font-mono w-8 h-8"
             title="Reset test suites to clean default production suites"
           >
-            <RefreshCw size={13} />
-            <span className="hidden lg:inline">RESET_DEFAULTS</span>
+            <RefreshCw size={14} />
           </button>
         </div>
 
@@ -724,18 +721,6 @@ export function TestSuiteRunner({
             <span className="text-[10px] font-mono text-slate-500 uppercase">FAILED:</span>
             <span className="text-xs font-mono font-bold text-rose-400 flex items-center gap-1">
               <XCircle size={12} /> {suiteRunResult ? suiteRunResult.failedSteps : 0}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono text-slate-500 uppercase">PASS RATE:</span>
-            <span className={cn(
-              "text-xs font-mono font-bold px-2 py-0.5 rounded",
-              passRate === 100 ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" :
-              passRate > 0 ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" :
-              "bg-slate-800 text-slate-400"
-            )}>
-              {suiteRunResult ? `${passRate}%` : '---'}
             </span>
           </div>
 
@@ -933,11 +918,10 @@ export function TestSuiteRunner({
                   <button
                     type="button"
                     onClick={() => setShowStepCliModal(true)}
-                    className="px-2.5 py-1.5 rounded-lg bg-[#182030] hover:bg-slate-850 text-slate-300 hover:text-emerald-400 border border-slate-750 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs"
+                    className="px-2.5 py-1.5 rounded-lg bg-[#182030] hover:bg-slate-850 text-slate-300 hover:text-emerald-400 border border-slate-750 text-xs font-mono font-bold flex items-center justify-center cursor-pointer transition-all shadow-xs w-8 h-8"
                     title="View & copy exact cURL command for this test step"
                   >
-                    <Terminal size={12} className="text-emerald-400" />
-                    <span>CLI cURL</span>
+                    <Terminal size={14} className="text-emerald-400" />
                   </button>
 
                   <button
@@ -952,9 +936,10 @@ export function TestSuiteRunner({
                   <button
                     type="button"
                     onClick={() => setIsEditingStep(selectedStep)}
-                    className="px-3 py-1.5 rounded-lg bg-[#182030] hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer transition-all"
+                    className="px-2.5 py-1.5 rounded-lg bg-[#182030] hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-mono font-bold flex items-center justify-center cursor-pointer transition-all w-8 h-8"
+                    title="Edit step configuration"
                   >
-                    <Edit3 size={12} /> EDIT CONFIG
+                    <Edit3 size={14} />
                   </button>
                 </div>
               </div>
@@ -1061,7 +1046,7 @@ export function TestSuiteRunner({
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">
-                        CONTRACT & SLA ASSERTIONS ({selectedStep.assertions.length})
+                        ASSERTIONS ({selectedStep.assertions.length})
                       </span>
                       <button
                         type="button"

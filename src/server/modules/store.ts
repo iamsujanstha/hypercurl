@@ -8,53 +8,7 @@ const ENVIRONMENTS_FILE = path.join(DATA_DIR, 'environments.json');
 const SUITES_FILE = path.join(DATA_DIR, 'suites.json');
 const BENCHMARKS_FILE = path.join(DATA_DIR, 'benchmarks.json');
 
-const DEFAULT_ENVIRONMENTS = [
-  {
-    id: 'env-local',
-    name: 'Local',
-    type: 'local',
-    isProduction: false,
-    baseUrl: 'http://localhost:3000',
-    variables: [
-      { id: 'v1', key: 'BASE_URL', value: 'http://localhost:3000', enabled: true },
-      { id: 'v2', key: 'API_KEY', value: 'local_dev_secret_key_84920', isSecret: true, enabled: true },
-      { id: 'v3', key: 'TIMEOUT_MS', value: '5000', enabled: true }
-    ]
-  },
-  {
-    id: 'env-dev',
-    name: 'Development',
-    type: 'dev',
-    isProduction: false,
-    baseUrl: 'https://dev-api.example.com',
-    variables: [
-      { id: 'v4', key: 'BASE_URL', value: 'https://dev-api.example.com', enabled: true },
-      { id: 'v5', key: 'AUTH_TOKEN', value: 'bearer_dev_jwt_99182', isSecret: true, enabled: true }
-    ]
-  },
-  {
-    id: 'env-staging',
-    name: 'Staging',
-    type: 'staging',
-    isProduction: false,
-    baseUrl: 'https://staging-api.example.com',
-    variables: [
-      { id: 'v6', key: 'BASE_URL', value: 'https://staging-api.example.com', enabled: true },
-      { id: 'v7', key: 'API_KEY', value: 'staging_sec_key_443', isSecret: true, enabled: true }
-    ]
-  },
-  {
-    id: 'env-production',
-    name: 'Production',
-    type: 'production',
-    isProduction: true,
-    baseUrl: 'https://api.example.com',
-    variables: [
-      { id: 'v8', key: 'BASE_URL', value: 'https://api.example.com', enabled: true },
-      { id: 'v9', key: 'API_KEY', value: 'prod_live_sec_token_9901', isSecret: true, enabled: true }
-    ]
-  }
-];
+const DEFAULT_ENVIRONMENTS: any[] = [];
 
 export class Store {
   static async init() {
